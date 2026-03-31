@@ -48,21 +48,24 @@ public class ProgramRunner implements CPUDelegate {
 
     private final List<Breakpoint> breakpoints;
     private final Long maxInstructions;
+    private final boolean traceMode;
 
     public ProgramRunner(final String programPath, final String commandLine, final String hostWorkingDirectory,
                          final boolean traceCPU, final boolean traceInterrupt, final String traceFile,
-                         final List<Breakpoint> breakpoints, final Long maxInstructions) {
+                         final List<Breakpoint> breakpoints, final Long maxInstructions,
+                         final boolean traceMode) {
         directoryTranslation = new DirectoryTranslation(hostWorkingDirectory);
         this.programPath = directoryTranslation.emulatedPathToHostPath(programPath);
 
         this.commandLine = commandLine;
         this.breakpoints = breakpoints;
         this.maxInstructions = maxInstructions;
+        this.traceMode = traceMode;
 
         this.cpu = new CPU(this);
         this.interrupts = new Interrupts();
         this.trace = new Trace(cpu, traceCPU, traceInterrupt, traceFile);
-
+        this.cpu.setTraceMode(traceMode);
     }
 
     public void loadAndExecute() {
@@ -106,7 +109,10 @@ public class ProgramRunner implements CPUDelegate {
             cpu.setMaxInstructions(maxInstructions);
             System.out.println("Maximum instructions limit set to: " + maxInstructions);
         }
-
+        if (traceMode) {
+            System.out.println("Trace mode enabled");
+        }
+        cpu.printTraceLine();
         cpu.execute();
     }
 

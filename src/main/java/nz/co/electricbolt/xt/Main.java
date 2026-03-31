@@ -21,19 +21,22 @@ public class Main {
     private final CommandLineParser commandLine;
     private Long maxInstructions = null;
     private final List<Breakpoint> breakpoints = new ArrayList<>();
+    private boolean traceMode = false;  // Флаг для режима trace
 
     private Main(final CommandLineParser commandLine) {
         this.commandLine = commandLine;
     }
 
     private void printAppVersion() {
-        System.out.println("XT version 1.0.1; Copyright © 2025; Electric Bolt Limited.");
+        System.out.println("XT/DW version 1.0.2; Copyright © 2026; DosWorld.");
+        System.out.println("Copyright © 2025; Electric Bolt Limited.");
     }
 
     private void haltSyntax(final String message) {
         printAppVersion();
         System.out.println("Syntax:        xt help [run|int]");
         System.out.println("               xt run [options] program [program-args]");
+        System.out.println("               xt trace [options] program [program-args]");
         System.out.println("               xt int");
 
         if (!message.isEmpty()) {
@@ -46,20 +49,39 @@ public class Main {
 
     private void haltSyntaxRun(final String message) {
         printAppVersion();
-        System.out.println("Syntax:        xt run [-tc -ti file] [-c dir] program [program-args]");
+        System.out.println("Syntax:        xt run [-tc -ti file] [-c dir] [--max=N] [--bp=SEG:OFS]... program [program-args]");
         System.out.println("               Run a .EXE or .COM command line MS-DOS app on your host system.");
         System.out.println("-tc -ti file = Trace CPU and/or interrupts to the tracing host file specified.");
         System.out.println("-c dir       = The host directory that will be the root of the emulated C: drive");
         System.out.println("               If not specified then the current working directory will be used.");
         System.out.println("--max=N      = Maximum number of instructions to execute before stopping");
         System.out.println("--bp=SEG:OFS = Set a breakpoint at the specified segment:offset (hex)");
-        System.out.println("               Can be specified multiple times");
+        System.out.println("               Can be specified multiple times. Relative to EXE.");
         System.out.println("program      = The .EXE or .COM command line MS-DOS app you want to run. You can");
         System.out.println("               optionally prefix with emulated path.");
         System.out.println("program-args = Optional arguments for the MS-DOS app, max 127 characters.");
         System.out.println();
         System.out.println("The exit code will be 255 if XT terminates the program due to an error,");
         System.out.println("otherwise the exit code will be the exit code of the MS-DOS app.");
+
+        if (!message.isEmpty()) {
+            System.out.println();
+            System.out.println("error: " + message);
+        }
+
+        System.exit(255);
+    }
+
+    private void haltSyntaxTrace(final String message) {
+        printAppVersion();
+        System.out.println("Syntax:        xt trace [--max=N] [--bp=SEG:OFS]... program [program-args]");
+        System.out.println("               Trace execution of a .EXE or .COM command line MS-DOS app.");
+        System.out.println("               For each instruction, displays CS:IP and all register values.");
+        System.out.println("--max=N      = Maximum number of instructions to trace before stopping");
+        System.out.println("--bp=SEG:OFS = Set a breakpoint at the specified segment:offset (hex)");
+        System.out.println("               Can be specified multiple times. Relative to EXE.");
+        System.out.println("program      = The .EXE or .COM command line MS-DOS app you want to trace.");
+        System.out.println("program-args = Optional arguments for the MS-DOS app.");
 
         if (!message.isEmpty()) {
             System.out.println();
@@ -86,7 +108,7 @@ public class Main {
         }
 
         final ProgramRunner runner = new ProgramRunner(emulatedProgramPath, emulatedProgramArgs, hostWorkingDir,
-                traceCPU, traceInterrupt, traceFile, breakpoints, maxInstructions);
+                traceCPU, traceInterrupt, traceFile, breakpoints, maxInstructions, traceMode);
         runner.loadAndExecute();
     }
 
@@ -150,34 +172,41 @@ public class Main {
             haltSyntaxRun("expecting program argument");
         }
 
-        // Options.
-        String argument = commandLine.peek();
-        if (argument.startsWith("-t")) {
-            parseTraceOptions();
+        // Parse double dash options (--max, --bp) first
+        parseDoubleDashOptions();
+
+        // Parse trace options (-tc, -ti)
+        if (commandLine.hasNext()) {
+            String argument = commandLine.peek();
+            if (argument != null && argument.startsWith("-t")) {
+                parseTraceOptions();
+            }
         }
 
+        // Parse root directory option (-c)
+        if (commandLine.hasNext()) {
+            String argument = commandLine.peek();
+            if (argument != null && argument.equals("-c")) {
+                parseRootDirectory();
+            }
+        }
+
+        // Parse any remaining double dash options that might appear after -c
+        parseDoubleDashOptions();
+
+        // Program (mandatory)
         if (!commandLine.hasNext()) {
             haltSyntaxRun("expecting program argument");
         }
-
-        argument = commandLine.peek();
-        if (argument.equals("-c")) {
-            parseRootDirectory();
-        }
-
-        if (!commandLine.hasNext()) {
-            haltSyntaxRun("expecting program argument");
-        }
-
-        // Program (mandatory).
-        argument = commandLine.next();
+        
+        String argument = commandLine.next();
         if (argument.startsWith("-")) {
             haltSyntaxRun(argument + " not recognized");
         } else {
             emulatedProgramPath = argument;
         }
 
-        // Program args (optional).
+        // Program args (optional)
         final StringBuilder buf = new StringBuilder();
         while (commandLine.hasNext()) {
             if (!buf.isEmpty()) {
@@ -187,8 +216,70 @@ public class Main {
         }
         emulatedProgramArgs = buf.toString();
 
+        // Print settings if breakpoints or max instructions are set
+        if (!breakpoints.isEmpty()) {
+            System.out.println("Breakpoints set:");
+            for (Breakpoint bp : breakpoints) {
+                System.out.println("  " + bp);
+            }
+        }
+        
+        if (maxInstructions != null) {
+            System.out.println("Maximum instructions limit: " + maxInstructions);
+        }
+        
         run();
 
+        System.exit(255);
+    }
+
+    private void parseTrace() {
+        if (!commandLine.hasNext()) {
+            haltSyntaxTrace("expecting program argument");
+        }
+        
+        traceMode = true;
+        
+        // Parse double dash options (--max, --bp) for trace mode
+        parseDoubleDashOptions();
+
+        // Program (mandatory)
+        if (!commandLine.hasNext()) {
+            haltSyntaxTrace("expecting program argument");
+        }
+        
+        String argument = commandLine.next();
+        if (argument.startsWith("-")) {
+            haltSyntaxTrace(argument + " not recognized");
+        } else {
+            emulatedProgramPath = argument;
+        }
+
+        // Program args (optional)
+        final StringBuilder buf = new StringBuilder();
+        while (commandLine.hasNext()) {
+            if (!buf.isEmpty()) {
+                buf.append(' ');
+            }
+            buf.append(commandLine.next());
+        }
+        emulatedProgramArgs = buf.toString();
+
+        // Print settings
+        System.out.println("Trace mode enabled");
+        if (!breakpoints.isEmpty()) {
+            System.out.println("Breakpoints set:");
+            for (Breakpoint bp : breakpoints) {
+                System.out.println("  " + bp);
+            }
+        }
+        
+        if (maxInstructions != null) {
+            System.out.println("Maximum instructions limit: " + maxInstructions);
+        }
+        
+        run();
+        
         System.exit(255);
     }
 
@@ -197,6 +288,7 @@ public class Main {
             final String argument = commandLine.next();
             switch (argument) {
                 case "run" -> haltSyntaxRun("");
+                case "trace" -> haltSyntaxTrace("");
                 case "int" -> haltSyntaxInt();
                 default -> haltSyntax(argument + " not recognized");
             }
@@ -212,11 +304,19 @@ public class Main {
                 String value = argument.substring(6); // remove "--max="
                 maxInstructions = Long.parseLong(value);
                 if (maxInstructions <= 0) {
-                    haltSyntaxRun("--max value must be positive");
+                    if (traceMode) {
+                        haltSyntaxTrace("--max value must be positive");
+                    } else {
+                        haltSyntaxRun("--max value must be positive");
+                    }
                 }
                 return true;
             } catch (NumberFormatException e) {
-                haltSyntaxRun("Invalid --max value: " + argument.substring(6));
+                if (traceMode) {
+                    haltSyntaxTrace("Invalid --max value: " + argument.substring(6));
+                } else {
+                    haltSyntaxRun("Invalid --max value: " + argument.substring(6));
+                }
             }
         }
         return false;
@@ -234,22 +334,59 @@ public class Main {
                     int offset = Integer.parseInt(parts[1], 16);
                     
                     if (segment < 0 || segment > 0xFFFF) {
-                        haltSyntaxRun("Segment must be between 0 and 0xFFFF");
+                        if (traceMode) {
+                            haltSyntaxTrace("Segment must be between 0 and 0xFFFF");
+                        } else {
+                            haltSyntaxRun("Segment must be between 0 and 0xFFFF");
+                        }
                     }
                     if (offset < 0 || offset > 0xFFFF) {
-                        haltSyntaxRun("Offset must be between 0 and 0xFFFF");
+                        if (traceMode) {
+                            haltSyntaxTrace("Offset must be between 0 and 0xFFFF");
+                        } else {
+                            haltSyntaxRun("Offset must be between 0 and 0xFFFF");
+                        }
                     }
                     
                     breakpoints.add(new Breakpoint((short) segment, (short) offset));
                     return true;
                 } catch (NumberFormatException e) {
-                    haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET in hex");
+                    if (traceMode) {
+                        haltSyntaxTrace("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET in hex");
+                    } else {
+                        haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET in hex");
+                    }
                 }
             } else {
-                haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET");
+                if (traceMode) {
+                    haltSyntaxTrace("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET");
+                } else {
+                    haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET");
+                }
             }
         }
         return false;
+    }
+    
+    private void parseDoubleDashOptions() {
+        while (commandLine.hasNext()) {
+            String argument = commandLine.peek();
+            if (argument == null || !argument.startsWith("--")) {
+                break;
+            }
+            
+            if (argument.startsWith("--max=")) {
+                parseMaxOption();
+            } else if (argument.startsWith("--bp=")) {
+                parseBreakpointOption();
+            } else {
+                if (traceMode) {
+                    haltSyntaxTrace(argument + " option not recognized");
+                } else {
+                    haltSyntaxRun(argument + " option not recognized");
+                }
+            }
+        }
     }
 
     private void parse() {
@@ -259,6 +396,7 @@ public class Main {
                 case "help" -> parseHelp();
                 case "int" -> parseInt();
                 case "run" -> parseRun();
+                case "trace" -> parseTrace();
                 default -> haltSyntax(argument + " not recognized");
             }
         }
