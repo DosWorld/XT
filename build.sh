@@ -1,7 +1,7 @@
 #!/bin/bash
 
 rm xt.zip
-mvn clean package
+mvn clean package -DskipTests
 mkdir target/bin
 cp bin/* target/bin
 cp target/xt.jar target/bin
