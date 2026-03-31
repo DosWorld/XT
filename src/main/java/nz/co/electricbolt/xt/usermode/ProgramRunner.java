@@ -65,6 +65,7 @@ public class ProgramRunner implements CPUDelegate {
         psp.writeProgramEnd((short) 0xF000);
         psp.writeEnvironment((short) 0x0050);
         psp.writeCommandLine(commandLine);
+        nz.co.electricbolt.xt.usermode.interrupts.dos.Memory.initializeMemoryManager(cpu, (short) 0x0090);
 
         String filename1 = "";
         String filename2 = "";
