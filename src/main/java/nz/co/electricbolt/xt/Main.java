@@ -244,18 +244,6 @@ public class Main {
         }
         emulatedProgramArgs = buf.toString();
 
-        // Print settings if breakpoints or max instructions are set
-        if (!breakpoints.isEmpty()) {
-            System.out.println("Breakpoints set:");
-            for (Breakpoint bp : breakpoints) {
-                System.out.println("  " + bp);
-            }
-        }
-        
-        if (maxInstructions != null) {
-            System.out.println("Maximum instructions limit: " + maxInstructions);
-        }
-        
         run();
 
         System.exit(255);
@@ -343,18 +331,6 @@ public class Main {
         }
         emulatedProgramArgs = buf.toString();
 
-        // Print settings
-        System.out.println("Trace mode enabled");
-        if (!breakpoints.isEmpty()) {
-            System.out.println("Breakpoints set:");
-            for (Breakpoint bp : breakpoints) {
-                System.out.println("  " + bp);
-            }
-        }
-        
-        if (maxInstructions != null) {
-            System.out.println("Maximum instructions limit: " + maxInstructions);
-        }
         
         run();
         

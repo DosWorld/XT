@@ -1215,9 +1215,6 @@ public class CPU {
                 System.out.print(" <- SP");
             }
             System.out.println();
-            if ((i + 1) % 8 == 0 && i + 1 < count) {
-                System.out.println();
-            }
         }
     }
 
