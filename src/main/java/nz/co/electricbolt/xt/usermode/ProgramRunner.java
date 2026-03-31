@@ -4,6 +4,7 @@
 package nz.co.electricbolt.xt.usermode;
 
 import nz.co.electricbolt.xt.Breakpoint;
+import nz.co.electricbolt.xt.Watchpoint;
 import nz.co.electricbolt.xt.cpu.CPU;
 import nz.co.electricbolt.xt.cpu.CPUDelegate;
 import nz.co.electricbolt.xt.cpu.SegOfs;
@@ -47,18 +48,20 @@ public class ProgramRunner implements CPUDelegate {
     private final Trace trace;
 
     private final List<Breakpoint> breakpoints;
+    private final List<Watchpoint> watchpoints;
     private final Long maxInstructions;
     private final boolean traceMode;
 
     public ProgramRunner(final String programPath, final String commandLine, final String hostWorkingDirectory,
                          final boolean traceCPU, final boolean traceInterrupt, final String traceFile,
-                         final List<Breakpoint> breakpoints, final Long maxInstructions,
+                         final List<Breakpoint> breakpoints, final List<Watchpoint> watchpoints, final Long maxInstructions,
                          final boolean traceMode) {
         directoryTranslation = new DirectoryTranslation(hostWorkingDirectory);
         this.programPath = directoryTranslation.emulatedPathToHostPath(programPath);
 
         this.commandLine = commandLine;
         this.breakpoints = breakpoints;
+        this.watchpoints = watchpoints;
         this.maxInstructions = maxInstructions;
         this.traceMode = traceMode;
 
@@ -102,15 +105,14 @@ public class ProgramRunner implements CPUDelegate {
 
         if (breakpoints != null && !breakpoints.isEmpty()) {
             cpu.setBreakpoints(breakpoints);
-            System.out.println("Breakpoints set: " + breakpoints);
         }
-        
+
+        if (watchpoints != null && !watchpoints.isEmpty()) {
+            cpu.setWatchpoints(watchpoints);
+        }
+
         if (maxInstructions != null) {
             cpu.setMaxInstructions(maxInstructions);
-            System.out.println("Maximum instructions limit set to: " + maxInstructions);
-        }
-        if (traceMode) {
-            System.out.println("Trace mode enabled");
         }
         cpu.printTraceLine();
         cpu.execute();

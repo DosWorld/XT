@@ -4,6 +4,7 @@
 package nz.co.electricbolt.xt.cpu;
 
 import nz.co.electricbolt.xt.Breakpoint;
+import nz.co.electricbolt.xt.Watchpoint;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -31,6 +32,8 @@ public class CPU {
     private List<Breakpoint> breakpoints = new ArrayList<>();
     private boolean breakpointReached = false;
     private boolean traceMode = false;
+    private List<Watchpoint> watchpoints = new ArrayList<>();
+    private boolean watchpointReached = false;
 
     public CPU(CPUDelegate delegate) {
         this.delegate = delegate;
@@ -1250,7 +1253,36 @@ public class CPU {
         }
     }
 
+    private void checkWatchpoint(SegOfs address, Watchpoint.Type accessType) {
+        if (watchpoints == null) return;
+        for (Watchpoint wp : watchpoints) {
+            if (!wp.isHit() && wp.check(this, accessType, address)) {
+                wp.setHit(true);
+                watchpointReached = true;
+                dumpRegistersAndStop(String.format("Watchpoint reached at %s (%s access)",
+                    address.toString(), accessType.toString().toLowerCase()));
+                return;
+            }
+        }
+    }
+
     public void setTraceMode(boolean traceMode) {
         this.traceMode = traceMode;
+    }
+
+    public void setWatchpoints(List<Watchpoint> watchpoints) {
+        this.watchpoints = watchpoints;
+    }
+    
+    public boolean isWatchpointReached() {
+        return watchpointReached;
+    }
+
+    public void checkMemoryReadWatchpoint(SegOfs address) {
+        checkWatchpoint(address, Watchpoint.Type.READ);
+    }
+    
+    public void checkMemoryWriteWatchpoint(SegOfs address) {
+        checkWatchpoint(address, Watchpoint.Type.WRITE);
     }
 }

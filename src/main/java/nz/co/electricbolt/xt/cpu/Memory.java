@@ -3,6 +3,9 @@
 
 package nz.co.electricbolt.xt.cpu;
 
+import  nz.co.electricbolt.xt.Watchpoint;
+import  nz.co.electricbolt.xt.Watchpoint.Type;
+
 public class Memory {
 
     public static final byte PERMISSION_EXECUTE = 0x01;
@@ -177,6 +180,7 @@ public class Memory {
         if ((permissions[address] & Memory.PERMISSION_READ) == 0) {
             cpu.delegate.invalidMemoryAccess(segOfs, Memory.PERMISSION_READ);
         }
+	cpu.checkMemoryReadWatchpoint(segOfs); 
         return value;
     }
 
@@ -206,6 +210,7 @@ public class Memory {
         if ((permissions[address] & Memory.PERMISSION_WRITE) == 0) {
             cpu.delegate.invalidMemoryAccess(segOfs, Memory.PERMISSION_WRITE);
         }
+	cpu.checkMemoryWriteWatchpoint(segOfs);    
         buf[address] = value;
     }
 

@@ -295,8 +295,8 @@ public class Interrupts {
                     if (annotations.length != 1 || checkReg8(annotations[0].annotationType()))
                         haltError("method " + clazzMethod.getName() + " char parameter must be annotated with AL, BL, CL, DL, AH, BH, CH or DH.");
                 } else if (parameterType == short.class) {
-                    if (annotations.length != 1 || checkReg16(annotations[0].annotationType()))
-                        haltError("method " + clazzMethod.getName() + " short parameter must be annotated with AX, BX, CX, DX, SI or DI.");
+                    if (annotations.length != 1 || (checkReg16(annotations[0].annotationType()) && checkSegReg16(annotations[0].annotationType())))
+                        haltError("method " + clazzMethod.getName() + " short parameter must be annotated with AX, BX, CX, DX, SI,  DI, ES, DS.");
                 } else if (parameterType == int.class) {
                     if (annotations.length != 2 || checkReg16(annotations[0].annotationType()) || checkReg16(annotations[1].annotationType()))
                         haltError("method " + clazzMethod.getName() + " int parameter must be annotated with AX, BX, CX, DX, SI or DI.");
