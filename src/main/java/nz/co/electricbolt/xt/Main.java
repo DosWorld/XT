@@ -5,6 +5,8 @@ package nz.co.electricbolt.xt;
 
 import nz.co.electricbolt.xt.usermode.ProgramRunner;
 import nz.co.electricbolt.xt.usermode.interrupts.Interrupts;
+import java.util.List;
+import java.util.ArrayList;
 
 import java.io.File;
 
@@ -17,6 +19,8 @@ public class Main {
     String emulatedProgramArgs = "";
     String hostWorkingDir = "";
     private final CommandLineParser commandLine;
+    private Long maxInstructions = null;
+    private final List<Breakpoint> breakpoints = new ArrayList<>();
 
     private Main(final CommandLineParser commandLine) {
         this.commandLine = commandLine;
@@ -47,6 +51,9 @@ public class Main {
         System.out.println("-tc -ti file = Trace CPU and/or interrupts to the tracing host file specified.");
         System.out.println("-c dir       = The host directory that will be the root of the emulated C: drive");
         System.out.println("               If not specified then the current working directory will be used.");
+        System.out.println("--max=N      = Maximum number of instructions to execute before stopping");
+        System.out.println("--bp=SEG:OFS = Set a breakpoint at the specified segment:offset (hex)");
+        System.out.println("               Can be specified multiple times");
         System.out.println("program      = The .EXE or .COM command line MS-DOS app you want to run. You can");
         System.out.println("               optionally prefix with emulated path.");
         System.out.println("program-args = Optional arguments for the MS-DOS app, max 127 characters.");
@@ -79,7 +86,7 @@ public class Main {
         }
 
         final ProgramRunner runner = new ProgramRunner(emulatedProgramPath, emulatedProgramArgs, hostWorkingDir,
-                traceCPU, traceInterrupt, traceFile);
+                traceCPU, traceInterrupt, traceFile, breakpoints, maxInstructions);
         runner.loadAndExecute();
     }
 
@@ -195,6 +202,54 @@ public class Main {
             }
         }
         haltSyntax("");
+    }
+
+    private boolean parseMaxOption() {
+        String argument = commandLine.peek();
+        if (argument != null && argument.startsWith("--max=")) {
+            commandLine.next(); // consume the argument
+            try {
+                String value = argument.substring(6); // remove "--max="
+                maxInstructions = Long.parseLong(value);
+                if (maxInstructions <= 0) {
+                    haltSyntaxRun("--max value must be positive");
+                }
+                return true;
+            } catch (NumberFormatException e) {
+                haltSyntaxRun("Invalid --max value: " + argument.substring(6));
+            }
+        }
+        return false;
+    }
+
+    private boolean parseBreakpointOption() {
+        String argument = commandLine.peek();
+        if (argument != null && argument.startsWith("--bp=")) {
+            commandLine.next(); // consume the argument
+            String bpStr = argument.substring(5); // remove "--bp="
+            String[] parts = bpStr.split(":");
+            if (parts.length == 2) {
+                try {
+                    int segment = Integer.parseInt(parts[0], 16);
+                    int offset = Integer.parseInt(parts[1], 16);
+                    
+                    if (segment < 0 || segment > 0xFFFF) {
+                        haltSyntaxRun("Segment must be between 0 and 0xFFFF");
+                    }
+                    if (offset < 0 || offset > 0xFFFF) {
+                        haltSyntaxRun("Offset must be between 0 and 0xFFFF");
+                    }
+                    
+                    breakpoints.add(new Breakpoint((short) segment, (short) offset));
+                    return true;
+                } catch (NumberFormatException e) {
+                    haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET in hex");
+                }
+            } else {
+                haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET");
+            }
+        }
+        return false;
     }
 
     private void parse() {

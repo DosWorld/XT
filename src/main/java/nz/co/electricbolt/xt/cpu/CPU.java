@@ -3,6 +3,10 @@
 
 package nz.co.electricbolt.xt.cpu;
 
+import nz.co.electricbolt.xt.Breakpoint;
+import java.util.List;
+import java.util.ArrayList;
+
 public class CPU {
 
     final RegSet reg = new RegSet();
@@ -22,6 +26,10 @@ public class CPU {
     boolean repeat;
     Boolean repeatFlag;
     long instructionCount;
+
+    private long maxInstructions = -1;
+    private List<Breakpoint> breakpoints = new ArrayList<>();
+    private boolean breakpointReached = false;
 
     public CPU(CPUDelegate delegate) {
         this.delegate = delegate;
@@ -48,26 +56,49 @@ public class CPU {
      */
     public void execute() {
         while (true) {
+            if (maxInstructions >= 0 && instructionCount >= maxInstructions) {
+                dumpRegistersAndStop("Maximum instructions limit reached: " + maxInstructions);
+                return;
+            }
+            
             repeat = false;
             repeatFlag = null;
             segmentOverride = null;
+            
+            if (checkBreakpoint()) {
+                dumpRegistersAndStop("Breakpoint reached at " + 
+                    String.format("%04X:%04X", reg.CS.getValue(), reg.IP.getValue()));
+                return;
+            }
+            
             step();
         }
     }
 
     /**
-     *  Executes the CPU for a maximum of maxSteps, or until the delegate terminates the execution.
-     *  A step is defined as a single instruction (including any segment prefix overrides and REP opcodes).
+     * Executes the CPU for a maximum of maxSteps, or until the delegate terminates the execution.
+     * A step is defined as a single instruction (including any segment prefix overrides and REP opcodes).
      */
     public void execute(int maxSteps) {
         while (maxSteps-- > 0) {
+            if (maxInstructions >= 0 && instructionCount >= maxInstructions) {
+                dumpRegistersAndStop("Maximum instructions limit reached: " + maxInstructions);
+                return;
+            }
+            
             repeat = false;
             repeatFlag = null;
             segmentOverride = null;
+            
+            if (checkBreakpoint()) {
+                dumpRegistersAndStop("Breakpoint reached at " + 
+                    String.format("%04X:%04X", reg.CS.getValue(), reg.IP.getValue()));
+                return;
+            }
+            
             step();
         }
     }
-
     /**
      * Opcode descriptions from Turbo Assembler Quick Reference Guide v3.2.
      */
@@ -1062,8 +1093,58 @@ public class CPU {
         }
     }
 
+    private boolean checkBreakpoint() {
+        short currentCS = reg.CS.getValue();
+        short currentIP = reg.IP.getValue();
+        
+        for (Breakpoint bp : breakpoints) {
+            if (!bp.isHit() && bp.getSegment() == currentCS && bp.getOffset() == currentIP) {
+                bp.setHit(true);
+                breakpointReached = true;
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public String toString() {
         return reg.toString();
+    }
+
+    public void setMaxInstructions(long max) {
+        this.maxInstructions = max;
+    }
+    
+    public void setBreakpoints(List<Breakpoint> breakpoints) {
+        this.breakpoints = breakpoints;
+    }
+    
+    public boolean isBreakpointReached() {
+        return breakpointReached;
+    }
+
+    private void dumpRegistersAndStop(String reason) {
+        System.out.println("\n*** EXECUTION STOPPED ***");
+        System.out.println("Reason: " + reason);
+        System.out.println("Instructions executed: " + instructionCount);
+        System.out.println("\nRegister dump:");
+        System.out.println(reg.toString());
+        System.out.println("\nCS:IP = " + String.format("%04X:%04X", reg.CS.getValue(), reg.IP.getValue()));
+        System.out.println("SS:SP = " + String.format("%04X:%04X", reg.SS.getValue(), reg.SP.getValue()));
+        System.out.println("DS = " + String.format("%04X", reg.DS.getValue()));
+        System.out.println("ES = " + String.format("%04X", reg.ES.getValue()));
+        
+        // Выводим текущую инструкцию (16 байт)
+        System.out.println("\nCurrent instruction bytes:");
+        SegOfs currentAddr = new SegOfs(reg.CS, reg.IP);
+        for (int i = 0; i < 16; i++) {
+            byte b = memory.fetchByte(currentAddr);
+            System.out.printf("%02X ", b & 0xFF);
+            currentAddr.increment();
+        }
+        System.out.println();
+        
+        System.exit(0);
     }
 }

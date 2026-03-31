@@ -3,6 +3,7 @@
 
 package nz.co.electricbolt.xt.usermode;
 
+import nz.co.electricbolt.xt.Breakpoint;
 import nz.co.electricbolt.xt.cpu.CPU;
 import nz.co.electricbolt.xt.cpu.CPUDelegate;
 import nz.co.electricbolt.xt.cpu.SegOfs;
@@ -11,6 +12,7 @@ import nz.co.electricbolt.xt.usermode.interrupts.dos.FileIO;
 import nz.co.electricbolt.xt.usermode.util.DirectoryTranslation;
 import nz.co.electricbolt.xt.usermode.util.MemoryUtil;
 import nz.co.electricbolt.xt.usermode.util.Trace;
+import java.util.List;
 
 public class ProgramRunner implements CPUDelegate {
 
@@ -44,16 +46,23 @@ public class ProgramRunner implements CPUDelegate {
     private final DirectoryTranslation directoryTranslation;
     private final Trace trace;
 
+    private final List<Breakpoint> breakpoints;
+    private final Long maxInstructions;
+
     public ProgramRunner(final String programPath, final String commandLine, final String hostWorkingDirectory,
-                         final boolean traceCPU, final boolean traceInterrupt, final String traceFile) {
+                         final boolean traceCPU, final boolean traceInterrupt, final String traceFile,
+                         final List<Breakpoint> breakpoints, final Long maxInstructions) {
         directoryTranslation = new DirectoryTranslation(hostWorkingDirectory);
         this.programPath = directoryTranslation.emulatedPathToHostPath(programPath);
 
         this.commandLine = commandLine;
+        this.breakpoints = breakpoints;
+        this.maxInstructions = maxInstructions;
 
         this.cpu = new CPU(this);
         this.interrupts = new Interrupts();
         this.trace = new Trace(cpu, traceCPU, traceInterrupt, traceFile);
+
     }
 
     public void loadAndExecute() {
@@ -87,6 +96,16 @@ public class ProgramRunner implements CPUDelegate {
 
         final ProgramLoader programLoader = new ProgramLoader(cpu);
         programLoader.load(programPath);
+
+        if (breakpoints != null && !breakpoints.isEmpty()) {
+            cpu.setBreakpoints(breakpoints);
+            System.out.println("Breakpoints set: " + breakpoints);
+        }
+        
+        if (maxInstructions != null) {
+            cpu.setMaxInstructions(maxInstructions);
+            System.out.println("Maximum instructions limit set to: " + maxInstructions);
+        }
 
         cpu.execute();
     }
