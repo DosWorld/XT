@@ -1,6 +1,3 @@
-// Group5Instructions.java
-// XT Copyright © 2025; Electric Bolt Limited.
-
 package nz.co.electricbolt.xt.cpu;
 
 public class Group5Instructions {

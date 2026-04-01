@@ -1,6 +1,3 @@
-// Memory.java
-// XT Copyright © 2025; Electric Bolt Limited.
-
 package nz.co.electricbolt.xt.cpu;
 
 import  nz.co.electricbolt.xt.Watchpoint;

@@ -1,6 +1,3 @@
-// Reg8.java
-// XT Copyright © 2025; Electric Bolt Limited.
-
 package nz.co.electricbolt.xt.cpu;
 
 public class Reg8 {

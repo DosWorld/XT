@@ -93,6 +93,10 @@ public class Interrupts {
             key = String.format("%02X %02X %02X", interrupt, cpu.getReg().AH.getValue(), cpu.getReg().AL.getValue());
             impl = implMap.get(key);
             if (impl == null) {
+                    String wildcardKey = String.format("%02X FF", interrupt);
+                    impl = implMap.get(wildcardKey);
+            }
+            if (impl == null) {
                 trace.log(String.format("Unhandled interrupt %02X%n", interrupt));
                 trace.log(cpu.getReg().toString());
                 System.err.printf("Unhandled interrupt %02X%n", interrupt);
