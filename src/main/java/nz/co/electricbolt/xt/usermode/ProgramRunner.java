@@ -114,7 +114,6 @@ public class ProgramRunner implements CPUDelegate {
         if (maxInstructions != null) {
             cpu.setMaxInstructions(maxInstructions);
         }
-        cpu.printTraceLine();
         cpu.execute();
     }
 

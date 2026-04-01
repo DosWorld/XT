@@ -1,13 +1,9 @@
-// Main.java
-// XT Copyright © 2025; Electric Bolt Limited.
-
 package nz.co.electricbolt.xt;
 
 import nz.co.electricbolt.xt.usermode.ProgramRunner;
 import nz.co.electricbolt.xt.usermode.interrupts.Interrupts;
 import java.util.List;
 import java.util.ArrayList;
-
 import java.io.File;
 
 public class Main {
@@ -39,65 +35,62 @@ public class Main {
         System.out.println("               xt run [options] program [program-args]");
         System.out.println("               xt trace [options] program [program-args]");
         System.out.println("               xt int");
-
         if (!message.isEmpty()) {
             System.out.println();
             System.out.println("error: " + message);
         }
-
         System.exit(255);
     }
 
     private void haltSyntaxRun(final String message) {
         printAppVersion();
-        System.out.println("Syntax:        xt run [-tc -ti file] [-c dir] [--max=N] [--bp=SEG:OFS]... [--wp=SEG:OFS:type]... program [program-args]");
+        System.out.println("Syntax:        xt run [-c dir] program [program-args]");
         System.out.println("               Run a .EXE or .COM command line MS-DOS app on your host system.");
-        System.out.println("-tc -ti file = Trace CPU and/or interrupts to the tracing host file specified.");
         System.out.println("-c dir       = The host directory that will be the root of the emulated C: drive");
         System.out.println("               If not specified then the current working directory will be used.");
-        System.out.println("--max=N      = Maximum number of instructions to execute before stopping");
-        System.out.println("--bp=SEG:OFS = Set a breakpoint at the specified segment:offset (hex)");
-        System.out.println("               Can be specified multiple times. Relative to EXE.");
-        System.out.println("--wp=SEG:OFS:type = Set a watchpoint at the specified segment:offset (hex)");
-        System.out.println("               type can be: r (read), w (write), a (access)");
-        System.out.println("               Can be specified multiple times.");
         System.out.println("program      = The .EXE or .COM command line MS-DOS app you want to run. You can");
         System.out.println("               optionally prefix with emulated path.");
         System.out.println("program-args = Optional arguments for the MS-DOS app, max 127 characters.");
         System.out.println();
         System.out.println("The exit code will be 255 if XT terminates the program due to an error,");
         System.out.println("otherwise the exit code will be the exit code of the MS-DOS app.");
-
         if (!message.isEmpty()) {
             System.out.println();
             System.out.println("error: " + message);
         }
-
         System.exit(255);
     }
 
     private void haltSyntaxTrace(final String message) {
         printAppVersion();
-        System.out.println("Syntax:        xt trace [--max=N] [--bp=SEG:OFS]... [--wp=SEG:OFS:type]... program [program-args]");
+        System.out.println("Syntax:        xt trace [--max=N] [--bp=SEG:OFS[:COND]]... [--wp=SEG:OFS:type]... program [program-args]");
         System.out.println("               Trace execution of a .EXE or .COM command line MS-DOS app.");
-        System.out.println("               For each instruction, displays CS:IP and all register values.");
+        System.out.println("               For each instruction, displays CS:IP, disassembly, and all register values.");
         System.out.println("--max=N      = Maximum number of instructions to trace before stopping");
         System.out.println("--bp=SEG:OFS = Set a breakpoint at the specified segment:offset (hex)");
-        System.out.println("               Can be specified multiple times. Relative to EXE.");
+        System.out.println("               Can be specified multiple times. Example: --bp=1000:2000");
+        System.out.println("--bp=SEG:OFS:COND = Conditional breakpoint. Condition format: REG==VALUE");
+        System.out.println("               Supported registers: AX, BX, CX, DX, SI, DI, BP, SP, DS, ES, SS, FLAGS.CARRY, FLAGS.ZERO, FLAGS.OVERFLOW");
+        System.out.println("               Example: --bp=1000:2000:AX==1234   (stops when AX=0x1234)");
+        System.out.println("               Example: --bp=1000:2000:FLAGS.ZERO==1   (stops when ZF=1)");
         System.out.println("--wp=SEG:OFS:type = Set a watchpoint at the specified segment:offset (hex)");
         System.out.println("               type can be: r (read), w (write), a (access)");
-        System.out.println("               Can be specified multiple times.");
+        System.out.println("               Can be specified multiple times. Example: --wp=1000:2000:w");
         System.out.println("program      = The .EXE or .COM command line MS-DOS app you want to trace.");
         System.out.println("program-args = Optional arguments for the MS-DOS app.");
-
+        System.out.println();
+        System.out.println("Memory layout for loaded programs:");
+        System.out.println("  PSP (Program Segment Prefix) is always at 0x0090:0x0000 (256 bytes)");
+        System.out.println("  For COM files: code starts at 0x0090:0x0100");
+        System.out.println("  For EXE files: code starts at 0x00A0:0x0000 (relocatable)");
+        System.out.println("  Stack for COM files is in the same segment, for EXE files at 0xF000:0xF000");
+        System.out.println("  Breakpoints and watchpoints use these segment:offset addresses.");
         if (!message.isEmpty()) {
             System.out.println();
             System.out.println("error: " + message);
         }
-
         System.exit(255);
     }
-
     private void haltSyntaxInt() {
         printAppVersion();
         System.out.println("Syntax:        xt int");
@@ -113,7 +106,6 @@ public class Main {
         if (!hostWorkingDir.endsWith(File.separator)) {
             hostWorkingDir += File.separator;
         }
-
         final ProgramRunner runner = new ProgramRunner(emulatedProgramPath, emulatedProgramArgs, hostWorkingDir,
                 traceCPU, traceInterrupt, traceFile, breakpoints, watchpoints, maxInstructions, traceMode);
         printSettings();
@@ -127,14 +119,12 @@ public class Main {
                 System.out.println("  " + bp);
             }
         }
-        
         if (!watchpoints.isEmpty()) {
             System.out.println("Watchpoints set:");
             for (Watchpoint wp : watchpoints) {
                 System.out.println("  " + wp);
             }
         }
-        
         if (maxInstructions != null) {
             System.out.println("Maximum instructions limit: " + maxInstructions);
         }
@@ -150,9 +140,9 @@ public class Main {
         traceInterrupt = true;
         final String argument = commandLine.next();
         if (argument == null) {
-            haltSyntaxRun("expecting tracing host file argument");
+            haltSyntaxTrace("expecting tracing host file argument");
         } else if (argument.startsWith("-")) {
-            haltSyntaxRun(argument + " argument not recognized");
+            haltSyntaxTrace(argument + " argument not recognized");
         } else {
             traceFile = argument;
         }
@@ -162,11 +152,11 @@ public class Main {
         traceCPU = true;
         final String argument = commandLine.next();
         if (argument == null) {
-            haltSyntaxRun("expecting -ti or tracing host file argument");
+            haltSyntaxTrace("expecting -ti or tracing host file argument");
         } else if (argument.equals("-ti")) {
             parseTraceInterrupt();
         } else if (argument.startsWith("-")) {
-            haltSyntaxRun(argument + " argument not recognized");
+            haltSyntaxTrace(argument + " argument not recognized");
         } else {
             traceFile = argument;
         }
@@ -179,12 +169,12 @@ public class Main {
         } else if (argument.equals("-ti")) {
             parseTraceInterrupt();
         } else {
-            haltSyntaxRun(argument + " argument not recognized");
+            haltSyntaxTrace(argument + " argument not recognized");
         }
     }
 
     private void parseRootDirectory() {
-        commandLine.next(); // skip over -c argument.
+        commandLine.next();
         String argument = commandLine.next();
         if (argument == null) {
             haltSyntaxRun("expecting host root directory argument");
@@ -199,42 +189,21 @@ public class Main {
         if (!commandLine.hasNext()) {
             haltSyntaxRun("expecting program argument");
         }
-
-        // Parse double dash options (--max, --bp) first
-        parseDoubleDashOptions();
-
-        // Parse trace options (-tc, -ti)
-        if (commandLine.hasNext()) {
-            String argument = commandLine.peek();
-            if (argument != null && argument.startsWith("-t")) {
-                parseTraceOptions();
-            }
-        }
-
-        // Parse root directory option (-c)
         if (commandLine.hasNext()) {
             String argument = commandLine.peek();
             if (argument != null && argument.equals("-c")) {
                 parseRootDirectory();
             }
         }
-
-        // Parse any remaining double dash options that might appear after -c
-        parseDoubleDashOptions();
-
-        // Program (mandatory)
         if (!commandLine.hasNext()) {
             haltSyntaxRun("expecting program argument");
         }
-        
         String argument = commandLine.next();
         if (argument.startsWith("-")) {
             haltSyntaxRun(argument + " not recognized");
         } else {
             emulatedProgramPath = argument;
         }
-
-        // Program args (optional)
         final StringBuilder buf = new StringBuilder();
         while (commandLine.hasNext()) {
             if (!buf.isEmpty()) {
@@ -243,31 +212,34 @@ public class Main {
             buf.append(commandLine.next());
         }
         emulatedProgramArgs = buf.toString();
-
         run();
-
-        System.exit(255);
     }
 
     private boolean parseWatchpointOption() {
         String argument = commandLine.peek();
         if (argument != null && argument.startsWith("--wp=")) {
-            commandLine.next(); // consume the argument
-            String wpStr = argument.substring(5); // remove "--wp="
+            commandLine.next();
+            String wpStr = argument.substring(5);
             String[] parts = wpStr.split(":");
             if (parts.length == 3) {
                 try {
                     int segment = Integer.parseInt(parts[0], 16);
                     int offset = Integer.parseInt(parts[1], 16);
                     String typeStr = parts[2].toLowerCase();
-                    
                     if (segment < 0 || segment > 0xFFFF) {
-                        haltSyntaxRun("Segment must be between 0 and 0xFFFF");
+                        if (traceMode) {
+                            haltSyntaxTrace("Segment must be between 0 and 0xFFFF");
+                        } else {
+                            haltSyntaxRun("Segment must be between 0 and 0xFFFF");
+                        }
                     }
                     if (offset < 0 || offset > 0xFFFF) {
-                        haltSyntaxRun("Offset must be between 0 and 0xFFFF");
+                        if (traceMode) {
+                            haltSyntaxTrace("Offset must be between 0 and 0xFFFF");
+                        } else {
+                            haltSyntaxRun("Offset must be between 0 and 0xFFFF");
+                        }
                     }
-                    
                     Watchpoint.Type type;
                     switch (typeStr) {
                         case "r":
@@ -283,17 +255,28 @@ public class Main {
                             type = Watchpoint.Type.ACCESS;
                             break;
                         default:
-                            haltSyntaxRun("Invalid watchpoint type: " + typeStr + ". Use r/w/a");
+                            if (traceMode) {
+                                haltSyntaxTrace("Invalid watchpoint type: " + typeStr + ". Use r/w/a");
+                            } else {
+                                haltSyntaxRun("Invalid watchpoint type: " + typeStr + ". Use r/w/a");
+                            }
                             return false;
                     }
-                    
                     watchpoints.add(new Watchpoint((short) segment, (short) offset, type));
                     return true;
                 } catch (NumberFormatException e) {
-                    haltSyntaxRun("Invalid watchpoint format: " + wpStr + ". Expected format: SEG:OFS:type");
+                    if (traceMode) {
+                        haltSyntaxTrace("Invalid watchpoint format: " + wpStr + ". Expected format: SEG:OFS:type");
+                    } else {
+                        haltSyntaxRun("Invalid watchpoint format: " + wpStr + ". Expected format: SEG:OFS:type");
+                    }
                 }
             } else {
-                haltSyntaxRun("Invalid watchpoint format: " + wpStr + ". Expected format: SEG:OFS:type (r/w/a)");
+                if (traceMode) {
+                    haltSyntaxTrace("Invalid watchpoint format: " + wpStr + ". Expected format: SEG:OFS:type (r/w/a)");
+                } else {
+                    haltSyntaxRun("Invalid watchpoint format: " + wpStr + ". Expected format: SEG:OFS:type (r/w/a)");
+                }
             }
         }
         return false;
@@ -303,25 +286,20 @@ public class Main {
         if (!commandLine.hasNext()) {
             haltSyntaxTrace("expecting program argument");
         }
-        
         traceMode = true;
-        
-        // Parse double dash options (--max, --bp) for trace mode
         parseDoubleDashOptions();
-
-        // Program (mandatory)
+        if (commandLine.hasNext() && commandLine.peek().startsWith("-t")) {
+            parseTraceOptions();
+        }
         if (!commandLine.hasNext()) {
             haltSyntaxTrace("expecting program argument");
         }
-        
         String argument = commandLine.next();
         if (argument.startsWith("-")) {
             haltSyntaxTrace(argument + " not recognized");
         } else {
             emulatedProgramPath = argument;
         }
-
-        // Program args (optional)
         final StringBuilder buf = new StringBuilder();
         while (commandLine.hasNext()) {
             if (!buf.isEmpty()) {
@@ -330,11 +308,7 @@ public class Main {
             buf.append(commandLine.next());
         }
         emulatedProgramArgs = buf.toString();
-
-        
         run();
-        
-        System.exit(255);
     }
 
     private void parseHelp() {
@@ -353,9 +327,9 @@ public class Main {
     private boolean parseMaxOption() {
         String argument = commandLine.peek();
         if (argument != null && argument.startsWith("--max=")) {
-            commandLine.next(); // consume the argument
+            commandLine.next();
             try {
-                String value = argument.substring(6); // remove "--max="
+                String value = argument.substring(6);
                 maxInstructions = Long.parseLong(value);
                 if (maxInstructions <= 0) {
                     if (traceMode) {
@@ -379,28 +353,42 @@ public class Main {
     private boolean parseBreakpointOption() {
         String argument = commandLine.peek();
         if (argument != null && argument.startsWith("--bp=")) {
-            commandLine.next(); // consume the argument
-            String bpStr = argument.substring(5); // remove "--bp="
+            commandLine.next();
+            String bpStr = argument.substring(5);
             String[] parts = bpStr.split(":");
             if (parts.length == 2) {
                 try {
                     int segment = Integer.parseInt(parts[0], 16);
                     int offset = Integer.parseInt(parts[1], 16);
-                    
                     if (segment < 0 || segment > 0xFFFF) {
-                        haltSyntaxRun("Segment must be between 0 and 0xFFFF");
+                        if (traceMode) {
+                            haltSyntaxTrace("Segment must be between 0 and 0xFFFF");
+                        } else {
+                            haltSyntaxRun("Segment must be between 0 and 0xFFFF");
+                        }
                     }
                     if (offset < 0 || offset > 0xFFFF) {
-                        haltSyntaxRun("Offset must be between 0 and 0xFFFF");
+                        if (traceMode) {
+                            haltSyntaxTrace("Offset must be between 0 and 0xFFFF");
+                        } else {
+                            haltSyntaxRun("Offset must be between 0 and 0xFFFF");
+                        }
                     }
-                    
                     breakpoints.add(new Breakpoint((short) segment, (short) offset));
                     return true;
                 } catch (NumberFormatException e) {
-                    haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET in hex");
+                    if (traceMode) {
+                        haltSyntaxTrace("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET in hex");
+                    } else {
+                        haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET in hex");
+                    }
                 }
             } else {
-                haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET");
+                if (traceMode) {
+                    haltSyntaxTrace("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET");
+                } else {
+                    haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET");
+                }
             }
         }
         return false;

@@ -7,6 +7,7 @@ import nz.co.electricbolt.xt.Breakpoint;
 import nz.co.electricbolt.xt.Watchpoint;
 import java.util.List;
 import java.util.ArrayList;
+import nz.co.electricbolt.xt.util.Disassembler;
 
 public class CPU {
 
@@ -34,9 +35,11 @@ public class CPU {
     private boolean traceMode = false;
     private List<Watchpoint> watchpoints = new ArrayList<>();
     private boolean watchpointReached = false;
+    private final Disassembler disassembler;
 
     public CPU(CPUDelegate delegate) {
         this.delegate = delegate;
+        this.disassembler = new Disassembler(this);
     }
 
     public Reg16 getSegmentOverride() {
@@ -127,10 +130,12 @@ public class CPU {
             reg.flags.isDirectionDown() ? 'D' : '-',
             reg.flags.isOverflow() ? 'O' : '-'
         );
-        System.out.printf("%04X:%04X [%s] AX=%04X BX=%04X CX=%04X DX=%04X SP=%04X BP=%04X SI=%04X DI=%04X DS=%04X ES=%04X SS=%04X FLAGS=%s%n",
+        String disasm = disassembler.disassemble();
+        System.out.printf("%04X:%04X [%s] %-16s AX=%04X BX=%04X CX=%04X DX=%04X SP=%04X BP=%04X SI=%04X DI=%04X DS=%04X ES=%04X SS=%04X FLAGS=%s%n",
             cs & 0xFFFF,
             ip & 0xFFFF,
             bytes.toString(),
+            disasm,
             reg.AX.getValue() & 0xFFFF,
             reg.BX.getValue() & 0xFFFF,
             reg.CX.getValue() & 0xFFFF,
@@ -1142,12 +1147,13 @@ public class CPU {
     private boolean checkBreakpoint() {
         short currentCS = reg.CS.getValue();
         short currentIP = reg.IP.getValue();
-        
         for (Breakpoint bp : breakpoints) {
             if (!bp.isHit() && bp.getSegment() == currentCS && bp.getOffset() == currentIP) {
-                bp.setHit(true);
-                breakpointReached = true;
-                return true;
+                if (bp.checkCondition(this)) {
+                    bp.setHit(true);
+                    breakpointReached = true;
+                    return true;
+                }
             }
         }
         return false;
