@@ -4,7 +4,7 @@
 
 ### Contents
 
-[What is XT?](#what-is-xt)<br>
+[What is XT/DW?](#what-is-xt)<br>
 &nbsp;&nbsp;[8086/8088 CPU emulation capability](#80868088-cpu-emulation-compatibility)<br>
 [Installing XT](#installing-xt)<br>
 &nbsp;&nbsp;[MacOS](#macos)<br>
@@ -16,7 +16,7 @@
 &nbsp;&nbsp;[Adding DOS or BIOS interrupt handling functions to allow additional MS-DOS programs to run](#adding-dos-or-bios-interrupt-handling-functions-to-allow-additional-ms-dos-programs-to-run)<br>
 &nbsp;&nbsp;[Implemented DOS and BIOS interrupt handling functions](#implemented-dos-and-bios-interrupt-handling-functions)<br>
 
-### What is XT?
+### What is XT/DW?
 
 1. ~~**Unit test framework** for 8086/8088 assembly code. You write your test specifications as a plain text file. Tests are executed against the public symbols of your compiled `.OBJ` files.~~ _Coming soon._
 
