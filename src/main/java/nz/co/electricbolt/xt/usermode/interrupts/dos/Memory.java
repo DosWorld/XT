@@ -18,7 +18,7 @@ public class Memory {
     public void allocateMemoryBlock(CPU cpu, @BX short paragraphs) {
         if (memoryManager == null || !memoryManager.isInitialized()) {
             cpu.getReg().flags.setCarry(true);
-            cpu.getReg().AX.setValue((byte) 0x01); // Invalid function
+            cpu.getReg().AX.setValue((byte) 0x01);
             return;
         }
         
@@ -29,7 +29,7 @@ public class Memory {
     public void freeAllocatedMemoryBlock(CPU cpu, @ES short segment) {
         if (memoryManager == null || !memoryManager.isInitialized()) {
             cpu.getReg().flags.setCarry(true);
-            cpu.getReg().AX.setValue((byte) 0x01); // Invalid function
+            cpu.getReg().AX.setValue((byte) 0x01);
             return;
         }
         
@@ -38,8 +38,24 @@ public class Memory {
     
     @Interrupt(function = 0x4A, description = "Resize memory block")
     public void resizeMemoryBlock(final CPU cpu) {
-        // We don't support resizing memory blocks, as we already allocate the entire address space to the app, so
-        // we just return success.
         cpu.getReg().flags.setCarry(false);
+    }
+    
+    public static void allocateMemoryBlockStatic(CPU cpu, short paragraphs) {
+        if (memoryManager == null || !memoryManager.isInitialized()) {
+            cpu.getReg().flags.setCarry(true);
+            cpu.getReg().AX.setValue((byte) 0x01);
+            return;
+        }
+        memoryManager.allocateMemory(cpu, paragraphs);
+    }
+    
+    public static void freeAllocatedMemoryBlockStatic(CPU cpu, short segment) {
+        if (memoryManager == null || !memoryManager.isInitialized()) {
+            cpu.getReg().flags.setCarry(true);
+            cpu.getReg().AX.setValue((byte) 0x01);
+            return;
+        }
+        memoryManager.freeMemory(cpu, segment);
     }
 }

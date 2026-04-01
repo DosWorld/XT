@@ -41,4 +41,38 @@ public class RegSet {
                 " " + SP +
                 " " + BP;
     }
+
+    public RegSet clone() {
+        RegSet copy = new RegSet();
+        copy.AX.setValue(AX.getValue());
+        copy.BX.setValue(BX.getValue());
+        copy.CX.setValue(CX.getValue());
+        copy.DX.setValue(DX.getValue());
+        copy.SP.setValue(SP.getValue());
+        copy.BP.setValue(BP.getValue());
+        copy.SI.setValue(SI.getValue());
+        copy.DI.setValue(DI.getValue());
+        copy.CS.setValue(CS.getValue());
+        copy.DS.setValue(DS.getValue());
+        copy.ES.setValue(ES.getValue());
+        copy.SS.setValue(SS.getValue());
+        copy.flags.setValue16(flags.getValue16());
+        return copy;
+    }
+
+    public void setFrom(RegSet other) {
+        AX.setValue(other.AX.getValue());
+        BX.setValue(other.BX.getValue());
+        CX.setValue(other.CX.getValue());
+        DX.setValue(other.DX.getValue());
+        SP.setValue(other.SP.getValue());
+        BP.setValue(other.BP.getValue());
+        SI.setValue(other.SI.getValue());
+        DI.setValue(other.DI.getValue());
+        CS.setValue(other.CS.getValue());
+        DS.setValue(other.DS.getValue());
+        ES.setValue(other.ES.getValue());
+        SS.setValue(other.SS.getValue());
+        flags.setValue16(other.flags.getValue16());
+    }
 }

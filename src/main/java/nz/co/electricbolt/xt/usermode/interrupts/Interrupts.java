@@ -80,6 +80,7 @@ public class Interrupts {
         loadClass("dos.TerminateProgram");
         loadClass("dos.MemoryManagement");
         loadClass("dos.ClipboardDOS");
+        loadClass("dos.Exec");
     }
 
     /**

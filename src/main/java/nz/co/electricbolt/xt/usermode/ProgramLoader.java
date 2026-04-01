@@ -1,3 +1,4 @@
+// ProgramLoader.java (исправленный)
 package nz.co.electricbolt.xt.usermode;
 
 import nz.co.electricbolt.xt.cpu.CPU;
@@ -16,27 +17,34 @@ public class ProgramLoader {
     }
 
     public void load(final String path) {
+        load(path, (short) 0x0090);
+    }
+
+    public void load(final String path, final short pspSegment) {
         try (final FileInputStream fis = new FileInputStream(path)) {
             final byte[] buf = fis.readAllBytes();
 
             if ((buf.length < 0x1C) || buf[0x00] != 'M' || buf[0x01] != 'Z') {
+                // COM file
                 if (buf.length == 0) {
                     throw new IOException("File " + path + " is not executable (length 0)");
                 }
 
-                // COM file.
-                final int startLinearAddress = new SegOfs((short) 0x0090, (short) 0x0100).toLinearAddress();
+                final int startLinearAddress = new SegOfs(pspSegment, (short) 0x0100).toLinearAddress();
                 cpu.getMemory().putLinearData(startLinearAddress, buf, 0, buf.length);
                 cpu.getMemory().removePermission(0, startLinearAddress, Memory.PERMISSION_EXECUTE);
                 cpu.getMemory().removePermission(startLinearAddress + buf.length, Memory.MEMORY_SIZE - startLinearAddress - buf.length, Memory.PERMISSION_EXECUTE);
 
                 cpu.getReg().SP.setValue((short) 0xFFFF);
-                cpu.getReg().SS.setValue((short) 0x0090);
+                cpu.getReg().SS.setValue(pspSegment);
                 cpu.getReg().IP.setValue((short) 0x0100);
-                cpu.getReg().CS.setValue((short) 0x0090);
+                cpu.getReg().CS.setValue(pspSegment);
+                cpu.getReg().DS.setValue(pspSegment);
+                cpu.getReg().ES.setValue(pspSegment);
             } else {
-                // EXE file.
+                // EXE file
                 final EXEHeader header = new EXEHeader(buf);
+                final short loadSegment = (short) (pspSegment + 0x10); // Program loads at PSP + 0x10 paragraphs
 
                 int totalFileSize;
                 if (header.lastBlockSize == 0) {
@@ -47,28 +55,22 @@ public class ProgramLoader {
                 final int headerSize = header.numberOfParagraphsInHeader * 16;
                 final int codeSize = totalFileSize - headerSize;
 
-                final int startLinearAddress = new SegOfs((short) 0x00A0, (short) 0x0000).toLinearAddress();
+                final int startLinearAddress = new SegOfs(loadSegment, (short) 0x0000).toLinearAddress();
                 cpu.getMemory().putLinearData(startLinearAddress, buf, headerSize, codeSize);
 
-                // Relocations.
                 for (int i = 0; i < header.numberOfRelocationEntries; i++) {
                     SegOfs segOfs = header.relocationItem(i);
-                    segOfs = new SegOfs((short) (segOfs.getSegment() + 0x00A0), segOfs.getOffset());
+                    segOfs = new SegOfs((short) (segOfs.getSegment() + loadSegment), segOfs.getOffset());
                     final short value = cpu.getMemory().readWord(segOfs);
-                    cpu.getMemory().writeWord(segOfs, (short) (value + 0x00A0));
+                    cpu.getMemory().writeWord(segOfs, (short) (value + loadSegment));
                 }
 
-                // Uncomment the following when diagnosing new program behavior, it can be useful to observe memory
-                // areas being read, written or executed unexpectedly:
-                // cpu.getMemory().removePermission(0, startLinearAddress, (byte) (Memory.PERMISSION_EXECUTE | Memory.PERMISSION_WRITE | Memory.PERMISSION_READ));
-                // cpu.getMemory().applyPermission(0x00902, 2, Memory.PERMISSION_READ); // PSP PROGRAM_END_SEG
-                // cpu.getMemory().applyPermission(0x00980, 128, Memory.PERMISSION_READ); // PSP COMMANDLINE_LENGTH..COMMANDLINE
-                // cpu.getMemory().removePermission(startLinearAddress + buf.length, Memory.MEMORY_SIZE - startLinearAddress - buf.length, Memory.PERMISSION_EXECUTE);
-
-                cpu.getReg().SP.setValue((short) header.SP);
-                cpu.getReg().SS.setValue((short) (header.relativeSS + 0x00A0));
-                cpu.getReg().IP.setValue((short) header.IP);
-                cpu.getReg().CS.setValue((short) (header.relativeCS + 0x00A0));
+                cpu.getReg().SP.setValue(header.SP);
+                cpu.getReg().SS.setValue((short) (header.relativeSS + loadSegment));
+                cpu.getReg().IP.setValue(header.IP);
+                cpu.getReg().CS.setValue((short) (header.relativeCS + loadSegment));
+                cpu.getReg().DS.setValue(pspSegment);
+                cpu.getReg().ES.setValue(pspSegment);
             }
         } catch (IOException e) {
             System.out.println("The program " + path + " could not be read.");
