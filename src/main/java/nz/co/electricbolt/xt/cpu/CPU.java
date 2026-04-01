@@ -71,11 +71,11 @@ public class CPU {
             segmentOverride = null;
 
             if (checkBreakpoint()) {
-                dumpRegistersAndStop("Breakpoint reached at " + 
+                dumpRegistersAndStop("Breakpoint reached at " +
                     String.format("%04X:%04X", reg.CS.getValue(), reg.IP.getValue()));
                 return;
             }
-            
+
             step();
         }
     }
@@ -93,10 +93,11 @@ public class CPU {
             repeatFlag = null;
             segmentOverride = null;
             if (checkBreakpoint()) {
-                dumpRegistersAndStop("Breakpoint reached at " + 
+                dumpRegistersAndStop("Breakpoint reached at " +
                     String.format("%04X:%04X", reg.CS.getValue(), reg.IP.getValue()));
                 return;
             }
+
             step();
         }
     }
@@ -144,6 +145,13 @@ public class CPU {
     }
 
     private void step() {
+        if ((reg.CS.getValue() & 0xFFFF) == 0xF000 && (reg.IP.getValue() & 0xFFFF) >= 0xFF00 && (reg.IP.getValue() & 0xFFFF) <= 0xFFFF) {
+            int interrupt = reg.IP.getValue() & 0xFF;
+            delegate.interrupt((byte) interrupt);
+            iret();
+            return;
+        }
+
         instructionCount++;
         byte opcode = fetch8();
 
@@ -806,14 +814,14 @@ public class CPU {
                 break;
             case (byte) 0xCC:
                 interrupt((byte) 3);
-                break;
+                return;
             case (byte) 0xCD:
                 interrupt(fetch8());
-                break;
+                return;
             case (byte) 0xCE:
                 if (reg.flags.isOverflow())
                     interrupt((byte) 4);
-                break;
+                return;
             case (byte) 0xCF:
                 iret();
                 break;
@@ -973,7 +981,6 @@ public class CPU {
         reg.flags.setInterruptEnabled(false);
         reg.CS.setValue((memory.getWord(new SegOfs((short) 0, (short) ((4 * (interrupt & 0xFF)) + 2)))));
         reg.IP.setValue((memory.getWord(new SegOfs((short) 0, (short) (4 * (interrupt & 0xFF))))));
-        delegate.interrupt(interrupt);
     }
 
     void loadSeg(Reg16 segReg) {
@@ -1025,11 +1032,11 @@ public class CPU {
     public void setMaxInstructions(long max) {
         this.maxInstructions = max;
     }
-    
+
     public void setBreakpoints(List<Breakpoint> breakpoints) {
         this.breakpoints = breakpoints;
     }
-    
+
     public boolean isBreakpointReached() {
         return breakpointReached;
     }
@@ -1098,10 +1105,10 @@ public class CPU {
             } else {
                 offsetStr = "BP";
             }
-            System.out.printf("%-6s  %04X:%04X  %04X", 
+            System.out.printf("%-6s  %04X:%04X  %04X",
                 offsetStr,
-                segment & 0xFFFF, 
-                offset & 0xFFFF, 
+                segment & 0xFFFF,
+                offset & 0xFFFF,
                 value & 0xFFFF);
             if (offsetWords == 0) {
                 System.out.print(" <- BP");
@@ -1134,7 +1141,7 @@ public class CPU {
     public void setWatchpoints(List<Watchpoint> watchpoints) {
         this.watchpoints = watchpoints;
     }
-    
+
     public boolean isWatchpointReached() {
         return watchpointReached;
     }
@@ -1142,7 +1149,7 @@ public class CPU {
     public void checkMemoryReadWatchpoint(SegOfs address) {
         checkWatchpoint(address, Watchpoint.Type.READ);
     }
-    
+
     public void checkMemoryWriteWatchpoint(SegOfs address) {
         checkWatchpoint(address, Watchpoint.Type.WRITE);
     }
