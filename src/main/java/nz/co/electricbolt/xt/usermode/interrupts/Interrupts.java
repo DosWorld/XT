@@ -79,6 +79,7 @@ public class Interrupts {
         loadClass("dos.TimeDate");
         loadClass("dos.TerminateProgram");
         loadClass("dos.MemoryManagement");
+        loadClass("dos.ClipboardDOS");
     }
 
     /**
