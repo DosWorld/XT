@@ -11,10 +11,9 @@
 &nbsp;&nbsp;[Windows](#windows)<br>
 &nbsp;&nbsp;[Linux (Ubuntu)](#linux-ubuntu)<br>
 [Running MS-DOS command line programs](#running-ms-dos-command-line-programs)<br>
-[Extending/Developing XT](#extendingdeveloping-xt)<br>
+[Extending/Developing XT/DW](#extendingdeveloping-xt)<br>
 &nbsp;&nbsp;[Cloning Single Step Tests](#cloning-single-step-tests)<br>
 &nbsp;&nbsp;[Adding DOS or BIOS interrupt handling functions to allow additional MS-DOS programs to run](#adding-dos-or-bios-interrupt-handling-functions-to-allow-additional-ms-dos-programs-to-run)<br>
-&nbsp;&nbsp;[Implemented DOS and BIOS interrupt handling functions](#implemented-dos-and-bios-interrupt-handling-functions)<br>
 
 ### What is XT/DW?
 
@@ -137,7 +136,7 @@ Because there is no Video RAM, ROM BIOS, Option ROMs or DOS kernel in memory, pr
 space to run. (Minus 2.5KB for interrupt vector table, BIOS data area, program segment prefix and environment 
 variables).
 
-### Extending/Developing XT ###
+### Extending/Developing XT/DW ###
 
 XT is developed with the following:
 * Java 17 JDK or greater.
