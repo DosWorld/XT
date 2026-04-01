@@ -70,6 +70,7 @@ public class Interrupts {
         loadClass("dos.ConsoleIO");
         loadClass("dos.FileDateTime");
         loadClass("dos.FileIO");
+        loadClass("dos.FileIOLFN");
         loadClass("dos.InterruptVectors");
         loadClass("dos.Misc");
         loadClass("dos.Memory");

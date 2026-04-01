@@ -55,7 +55,6 @@ public class FileIO {
     @Interrupt(function = 0x3C, description = "Create or truncate file")
     public void createFile(final CPU cpu, final Trace trace, final DirectoryTranslation directoryTranslation,
                            final @CX short fileAttributes, @ASCIZ @DS @DX String filename) {
-        // TODO: should use fileAttributes specified.
         filename = directoryTranslation.emulatedPathToHostPath(filename.toUpperCase());
         trace.interrupt("Host filename " + filename);
         final BaseFile baseFile = new DiskFile(filename, AccessMode.readWrite, SharingMode.compatibilityMode, false);
@@ -182,7 +181,7 @@ public class FileIO {
                 return;
             }
             cpu.getReg().flags.setCarry(false);
-            cpu.getReg().AL.setValue((byte) 0x03); // Documentation says "appears to be drive of deleted file".
+            cpu.getReg().AL.setValue((byte) 0x03);
         }
     }
 
@@ -227,7 +226,6 @@ public class FileIO {
         final File file = new File(filename);
         try {
             short result = 0;
-            // Check for Windows/DOS FAT file system.
             final DosFileAttributeView dosView = Files.getFileAttributeView(file.toPath(), DosFileAttributeView.class);
             if (dosView != null) {
                 final DosFileAttributes attrs = dosView.readAttributes();
@@ -242,7 +240,6 @@ public class FileIO {
                 if (attrs.isArchive())
                     result |= FileAttribute.archive;
             } else {
-                // Check for POSIX (Linux/Mac) file system.
                 final PosixFileAttributeView posixView = Files.getFileAttributeView(file.toPath(), PosixFileAttributeView.class);
                 if (posixView != null) {
                     PosixFileAttributes attrs = posixView.readAttributes();
@@ -251,7 +248,6 @@ public class FileIO {
                     if (!attrs.isDirectory())
                         result |= FileAttribute.directory;
                 } else {
-                    // Fall back to most basic attributes.
                     BasicFileAttributes attrs = Files.readAttributes(file.toPath(), BasicFileAttributes.class);
                     if (attrs.isDirectory())
                         result |= FileAttribute.directory;
@@ -287,7 +283,7 @@ public class FileIO {
         final BaseFile baseFile = getFileHandleOrSetErrorResult(cpu, trace, fileHandle);
         if (baseFile != null) {
             cpu.getReg().flags.setCarry(false);
-            cpu.getReg().AL.setValue((byte) 0xFF); // Ready.
+            cpu.getReg().AL.setValue((byte) 0xFF);
         }
     }
 
@@ -346,7 +342,6 @@ public class FileIO {
         final File sourceFile = new File(directoryTranslation.emulatedPathToHostPath(source.toUpperCase()));
         final File destFile = new File(directoryTranslation.emulatedPathToHostPath(dest.toUpperCase()));
 
-        // TODO: test in real DOS what the actual error codes are based upon the scenarios of files/paths wrong.
         if (!sourceFile.exists()) {
             setErrorResult(cpu, trace, ErrorCode.FileNotFound);
             return;
@@ -378,28 +373,57 @@ public class FileIO {
         }
     }
 
-    /**
-     * Retrieves the BaseFile that is associated with the filehandle specified. If the filehandle is invalid, AX will
-     * be set to 06h (invalid file handle), the carry flag set and the function will return null. Otherwise the
-     * BaseFile is returned.
-     */
+    @Interrupt(function = 0x39, description = "Create directory")
+    public void createDirectory(final CPU cpu, final Trace trace, final DirectoryTranslation directoryTranslation,
+                                @ASCIZ @DS @DX String path) {
+        path = directoryTranslation.emulatedPathToHostPath(path.toUpperCase());
+        File dir = new File(path);
+        if (dir.mkdirs()) {
+            cpu.getReg().flags.setCarry(false);
+        } else {
+            setErrorResult(cpu, trace, ErrorCode.PathNotFound);
+        }
+    }
+
+    @Interrupt(function = 0x3A, description = "Remove directory")
+    public void removeDirectory(final CPU cpu, final Trace trace, final DirectoryTranslation directoryTranslation,
+                                @ASCIZ @DS @DX String path) {
+        path = directoryTranslation.emulatedPathToHostPath(path.toUpperCase());
+        File dir = new File(path);
+        if (dir.exists() && dir.isDirectory() && dir.delete()) {
+            cpu.getReg().flags.setCarry(false);
+        } else {
+            setErrorResult(cpu, trace, ErrorCode.PathNotFound);
+        }
+    }
+
+    @Interrupt(function = 0x3B, description = "Set current directory")
+    public void setCurrentDirectory(final CPU cpu, final Trace trace, final DirectoryTranslation directoryTranslation,
+                                    @ASCIZ @DS @DX String path) {
+        directoryTranslation.setCurrentEmulatedDirectory(path);
+        cpu.getReg().flags.setCarry(false);
+    }
+
+    @Interrupt(function = 0x47, description = "Get current directory")
+    public void getCurrentDirectory(final CPU cpu, final Trace trace, final DirectoryTranslation directoryTranslation,
+                                    final @DL byte drive, final @DS @SI SegOfs buffer) {
+        String currentDir = directoryTranslation.getCurrentEmulatedDirectory();
+        MemoryUtil.writeStringZ(cpu.getMemory(), buffer, currentDir, '\0');
+        cpu.getReg().flags.setCarry(false);
+    }
+
     private BaseFile getFileHandleOrSetErrorResult(final CPU cpu, final Trace trace, final short fileHandle) {
         final BaseFile baseFile = fileHandleMap.get(fileHandle);
         if (baseFile == null) {
             trace.interrupt("Invalid filehandle " + fileHandle);
-
             setErrorResult(cpu, trace, ErrorCode.InvalidHandle);
             return null;
         }
         return baseFile;
     }
 
-    /**
-     * Sets the AX register to the specified error code and sets the carry flag.
-     */
     private void setErrorResult(final CPU cpu, final Trace trace, final ErrorCode errorCode) {
         trace.interrupt("Returning error " + errorCode.errorCode);
-
         cpu.getReg().flags.setCarry(true);
         cpu.getReg().AX.setValue(errorCode.errorCode);
     }
