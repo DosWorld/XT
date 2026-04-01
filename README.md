@@ -6,7 +6,7 @@
 
 [What is XT/DW?](#what-is-xt)<br>
 &nbsp;&nbsp;[8086/8088 CPU emulation capability](#80868088-cpu-emulation-compatibility)<br>
-[Installing XT](#installing-xt)<br>
+[Installing XT/DW](#installing-xt)<br>
 &nbsp;&nbsp;[MacOS](#macos)<br>
 &nbsp;&nbsp;[Windows](#windows)<br>
 &nbsp;&nbsp;[Linux (Ubuntu)](#linux-ubuntu)<br>
@@ -87,7 +87,7 @@ instructions **F6/6** `DIV` (8-bit), **F7/6** `DIV` (16-bit), **F6/7** `IDIV` (8
 would require a full microcode implementation of the algorithms, these instructions clear the undocumented flags 
 instead).
 
-### Installing XT
+### Installing XT/DW
 
 XT should run on any Java 17 or greater PC, including Windows, Mac or Linux. Intel or ARM.
 Use the GitHub [Releases](https://github.com/electricbolt/xt/releases) link to download `xt.zip`. XT is only ~110KB installed.
@@ -142,7 +142,6 @@ variables).
 XT is developed with the following:
 * Java 17 JDK or greater.
 * Maven.
-* IntelliJ IDEA (or your favourite editor).
 
 #### Cloning Single Step Tests
 
@@ -174,37 +173,3 @@ modify `READ/WRITE/EXECUTE` permissions for each byte of memory to isolate progr
 memory protection code in `ProgramLoader.java`.
 5. Add any appropriate unit tests.
 6. Submit a PR, and we'll do our best to review; time and workload permitting.
-
-#### Implemented DOS and BIOS interrupt handling functions
-
-- **INT 1A function 00** - Get system time clock ticks
-- **INT 20 function 00** - Terminate program
-- **INT 21 function 00** - Terminate program
-- **INT 21 function 02** - Write character to standard output
-- **INT 21 function 09** - Write string to standard output
-- **INT 21 function 1A** - Set disk transfer area address
-- **INT 21 function 25** - Set interrupt vector
-- **INT 21 function 2A** - Get system date
-- **INT 21 function 2C** - Get system time
-- **INT 21 function 2F** - Get disk transfer area address
-- **INT 21 function 30** - Get DOS version
-- **INT 21 function 3301** - Set extended break checking state
-- **INT 21 function 35** - Get interrupt vector
-- **INT 21 function 3700** - Get switch character
-- **INT 21 function 38** - Get country specific information
-- **INT 21 function 3C** - Create or truncate file
-- **INT 21 function 3D** - Open existing file
-- **INT 21 function 3E** - Close file
-- **INT 21 function 3F** - Read from file or device
-- **INT 21 function 40** - Write to file or device
-- **INT 21 function 41** - Delete file
-- **INT 21 function 42** - Set current file position
-- **INT 21 function 4300** - Get file attributes
-- **INT 21 function 4400** - IOCTL Get device information
-- **INT 21 function 4401** - IOCTL Set device information
-- **INT 21 function 4407** - IOCTL Get input/output status
-- **INT 21 function 4A** - Resize memory block
-- **INT 21 function 4C** - Terminate program with exit code
-- **INT 21 function 4E** - Find first matching file
-- **INT 21 function 56** - Rename file
-- **INT 21 function 5700** - Get file's date and time
