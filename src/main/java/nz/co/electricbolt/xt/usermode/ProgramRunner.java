@@ -1,6 +1,3 @@
-// ProgramRunner.java
-// XT Copyright © 2025; Electric Bolt Limited.
-
 package nz.co.electricbolt.xt.usermode;
 
 import nz.co.electricbolt.xt.Breakpoint;

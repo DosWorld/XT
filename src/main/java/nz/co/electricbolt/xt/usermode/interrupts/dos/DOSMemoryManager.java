@@ -1,4 +1,3 @@
-// DOSMemoryManager.java
 package nz.co.electricbolt.xt.usermode.interrupts.dos;
 
 import nz.co.electricbolt.xt.cpu.CPU;

@@ -1,6 +1,3 @@
-// BaseFile.java
-// XT Copyright © 2025; Electric Bolt Limited.
-
 package nz.co.electricbolt.xt.usermode.filedevice;
 
 import nz.co.electricbolt.xt.usermode.AccessMode;

@@ -1,6 +1,3 @@
-// ErrorCode.java
-// XT Copyright © 2025; Electric Bolt Limited.
-
 package nz.co.electricbolt.xt.usermode;
 
 /// Error codes from PC-Interrupts 2nd edition, Chapter 24, MS-DOS Kernel.
