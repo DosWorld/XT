@@ -4,26 +4,221 @@ public class FPU8087 {
 
     private final CPU cpu;
     private final double[] st = new double[8];
+    private final int[] tag = new int[8];
     private int top;
     private short control;
     private short status;
-    private final short[] tag = new short[8];
 
     public FPU8087(CPU cpu) {
         this.cpu = cpu;
         reset();
     }
 
-    private void updateStatus() {
-        status = (short) ((status & ~0x3800) | ((top & 7) << 11));
-    }
-
     private void reset() {
         top = 0;
         control = 0x037F;
         status = 0;
-        for (int i = 0; i < 8; i++) { st[i] = 0.0; tag[i] = 0; }
+        for (int i = 0; i < 8; i++) {
+            st[i] = 0.0;
+            tag[i] = 0;
+        }
         updateStatus();
+    }
+
+    private void updateStatus() {
+        status = (short) ((status & ~0x3800) | ((top & 7) << 11));
+    }
+
+    private int sti(int i) {
+        return (top + i) & 7;
+    }
+
+    private double getST(int i) {
+        return st[sti(i)];
+    }
+
+    private void setST(int i, double val) {
+        int idx = sti(i);
+        st[idx] = val;
+        tag[idx] = 1;
+        status &= 0xFF00;
+    }
+
+    private void push(double val) {
+        top = (top - 1) & 7;
+        setST(0, val);
+        updateStatus();
+    }
+
+    private void pop() {
+        tag[sti(0)] = 0;
+        top = (top + 1) & 7;
+        updateStatus();
+    }
+
+    private void compare(double a, double b) {
+        status &= 0xFF00;
+        if (Double.isNaN(a) || Double.isNaN(b)) {
+            status |= 0x0100;
+            status |= 0x4000;
+            status |= 0x0400;
+            return;
+        }
+        if (a < b) {
+            status |= 0x0100;
+        } else if (a > b) {
+            status |= 0x4000;
+        } else {
+            status |= 0x4000;
+        }
+    }
+
+    private void comparePop(double a, double b) {
+        compare(a, b);
+        pop();
+    }
+
+    private void addST(int i) {
+        setST(0, getST(0) + getST(i));
+    }
+
+    private void subST(int i) {
+        setST(0, getST(0) - getST(i));
+    }
+
+    private void mulST(int i) {
+        setST(0, getST(0) * getST(i));
+    }
+
+    private void divST(int i) {
+        setST(0, getST(0) / getST(i));
+    }
+
+    private void addSTi(int i) {
+        setST(i, getST(i) + getST(0));
+    }
+
+    private void subSTi(int i) {
+        setST(i, getST(i) - getST(0));
+    }
+
+    private void mulSTi(int i) {
+        setST(i, getST(i) * getST(0));
+    }
+
+    private void divSTi(int i) {
+        setST(i, getST(i) / getST(0));
+    }
+
+    private void addPop(int i) {
+        addST(i);
+        pop();
+    }
+
+    private void subPop(int i) {
+        subST(i);
+        pop();
+    }
+
+    private void mulPop(int i) {
+        mulST(i);
+        pop();
+    }
+
+    private void divPop(int i) {
+        divST(i);
+        pop();
+    }
+
+    private short readInteger16(SegOfs addr) {
+        return cpu.getMemory().readWord(addr);
+    }
+
+    private int readInteger32(SegOfs addr) {
+        return cpu.getMemory().readWord(addr) & 0xFFFF |
+               (cpu.getMemory().readWord(new SegOfs(addr.getSegment(), (short) (addr.getOffset() + 2))) << 16);
+    }
+
+    private long readInteger64(SegOfs addr) {
+        long low = readInteger32(addr) & 0xFFFFFFFFL;
+        long high = readInteger32(new SegOfs(addr.getSegment(), (short) (addr.getOffset() + 4))) & 0xFFFFFFFFL;
+        return (high << 32) | low;
+    }
+
+    private void writeInteger16(SegOfs addr, short value) {
+        cpu.getMemory().writeWord(addr, value);
+    }
+
+    private void writeInteger32(SegOfs addr, int value) {
+        cpu.getMemory().writeWord(addr, (short) (value & 0xFFFF));
+        addr.addOffset((short) 2);
+        cpu.getMemory().writeWord(addr, (short) ((value >> 16) & 0xFFFF));
+    }
+
+    private void writeInteger64(SegOfs addr, long value) {
+        writeInteger32(addr, (int) (value & 0xFFFFFFFFL));
+        addr.addOffset((short) 4);
+        writeInteger32(addr, (int) ((value >> 32) & 0xFFFFFFFFL));
+    }
+
+    private double readReal32(SegOfs addr) {
+        int bits = cpu.getMemory().readWord(addr) & 0xFFFF;
+        addr.addOffset((short) 2);
+        bits |= (cpu.getMemory().readWord(addr) << 16);
+        return Float.intBitsToFloat(bits);
+    }
+
+    private double readReal64(SegOfs addr) {
+        long bits = cpu.getMemory().readWord(addr) & 0xFFFF;
+        addr.addOffset((short) 2);
+        bits |= ((long) cpu.getMemory().readWord(addr) << 16);
+        addr.addOffset((short) 2);
+        bits |= ((long) cpu.getMemory().readWord(addr) << 32);
+        addr.addOffset((short) 2);
+        bits |= ((long) cpu.getMemory().readWord(addr) << 48);
+        return Double.longBitsToDouble(bits);
+    }
+
+    private void writeReal32(SegOfs addr, double value) {
+        int bits = Float.floatToIntBits((float) value);
+        cpu.getMemory().writeWord(addr, (short) (bits & 0xFFFF));
+        addr.addOffset((short) 2);
+        cpu.getMemory().writeWord(addr, (short) ((bits >> 16) & 0xFFFF));
+    }
+
+    private void writeReal64(SegOfs addr, double value) {
+        long bits = Double.doubleToLongBits(value);
+        cpu.getMemory().writeWord(addr, (short) (bits & 0xFFFF));
+        addr.addOffset((short) 2);
+        cpu.getMemory().writeWord(addr, (short) ((bits >> 16) & 0xFFFF));
+        addr.addOffset((short) 2);
+        cpu.getMemory().writeWord(addr, (short) ((bits >> 32) & 0xFFFF));
+        addr.addOffset((short) 2);
+        cpu.getMemory().writeWord(addr, (short) ((bits >> 48) & 0xFFFF));
+    }
+
+    private void storeEnv(SegOfs addr) {
+        cpu.getMemory().writeWord(addr, control);
+        addr.addOffset((short) 2);
+        cpu.getMemory().writeWord(addr, status);
+        addr.addOffset((short) 2);
+        short tagWord = 0;
+        for (int i = 0; i < 8; i++) {
+            tagWord |= (tag[i] << (i * 2));
+        }
+        cpu.getMemory().writeWord(addr, tagWord);
+    }
+
+    private void loadEnv(SegOfs addr) {
+        control = cpu.getMemory().readWord(addr);
+        addr.addOffset((short) 2);
+        status = cpu.getMemory().readWord(addr);
+        addr.addOffset((short) 2);
+        short tagWord = cpu.getMemory().readWord(addr);
+        for (int i = 0; i < 8; i++) {
+            tag[i] = (tagWord >> (i * 2)) & 3;
+        }
+        top = (status >> 11) & 7;
     }
 
     public void execute(int opcode, int modRM) {
@@ -81,171 +276,59 @@ public class FPU8087 {
         return new SegOfs(seg.getValue(), (short) offset);
     }
 
-    private double readReal32(SegOfs addr) {
-        int bits = cpu.getMemory().readWord(addr) & 0xFFFF;
-        addr.addOffset((short) 2);
-        bits |= (cpu.getMemory().readWord(addr) << 16);
-        return Float.intBitsToFloat(bits);
-    }
-
-    private double readReal64(SegOfs addr) {
-        long bits = cpu.getMemory().readWord(addr) & 0xFFFF;
-        addr.addOffset((short) 2);
-        bits |= ((long) cpu.getMemory().readWord(addr) << 16);
-        addr.addOffset((short) 2);
-        bits |= ((long) cpu.getMemory().readWord(addr) << 32);
-        addr.addOffset((short) 2);
-        bits |= ((long) cpu.getMemory().readWord(addr) << 48);
-        return Double.longBitsToDouble(bits);
-    }
-
-    private void writeReal32(SegOfs addr, double value) {
-        int bits = Float.floatToIntBits((float) value);
-        cpu.getMemory().writeWord(addr, (short) (bits & 0xFFFF));
-        addr.addOffset((short) 2);
-        cpu.getMemory().writeWord(addr, (short) ((bits >> 16) & 0xFFFF));
-    }
-
-    private void writeReal64(SegOfs addr, double value) {
-        long bits = Double.doubleToLongBits(value);
-        cpu.getMemory().writeWord(addr, (short) (bits & 0xFFFF));
-        addr.addOffset((short) 2);
-        cpu.getMemory().writeWord(addr, (short) ((bits >> 16) & 0xFFFF));
-        addr.addOffset((short) 2);
-        cpu.getMemory().writeWord(addr, (short) ((bits >> 32) & 0xFFFF));
-        addr.addOffset((short) 2);
-        cpu.getMemory().writeWord(addr, (short) ((bits >> 48) & 0xFFFF));
-    }
-
-    private int sti(int i) {
-        return (top + i) & 7;
-    }
-
-    private double getST(int i) {
-        return st[sti(i)];
-    }
-
-    private void setST(int i, double val) {
-        st[sti(i)] = val;
-        tag[sti(i)] = 1;
-        status = (short)(status & 0xFF00);
-    }
-
-    private void push(double val) {
-        top = (top - 1) & 7;
-        setST(0, val);
-        tag[sti(0)] = 1;
-        updateStatus();
-    }
-
-    private void pop() {
-        tag[sti(0)] = 0;
-        top = (top + 1) & 7;
-        updateStatus();
-    }
-
-    private void compare(double a, double b) {
-        status &= 0xFF00;
-        if (Double.isNaN(a) || Double.isNaN(b)) {
-            status |= 0x0100; // C0=1, C3=1 unordered
-            status |= 0x4000;
-            return;
-        }
-        if (a < b) {
-            status |= 0x0100; // C0=1 (less)
-        } else if (a > b) {
-            status |= 0x4000; // C3=1 (greater)
-        } else {
-            status |= 0x4000; // equal: C3=1
-            status |= 0x0100; // C0=1? Actually equal should have C3=1, C0=0.
-            // Clear C0 if needed
-            status &= ~0x0100;
-        }
-    }
-
-    private void comparePop(double a, double b) {
-        compare(a, b);
-        pop();
-    }
-
     private void d8_mem(int op, int reg, SegOfs addr) {
         double val = readReal32(addr);
         double st0 = getST(0);
-        double res = 0;
-        boolean pop = false;
         switch (reg) {
-            case 0: // fadd
-                res = st0 + val;
-                setST(0, res);
-                break;
-            case 1: // fmul
-                res = st0 * val;
-                setST(0, res);
-                break;
-            case 2: // fcom
-                compare(st0, val);
-                break;
-            case 3: // fcomp
-                comparePop(st0, val);
-                break;
-            case 4: // fsub
-                res = st0 - val;
-                setST(0, res);
-                break;
-            case 5: // fsubr
-                res = val - st0;
-                setST(0, res);
-                break;
-            case 6: // fdiv
-                res = st0 / val;
-                setST(0, res);
-                break;
-            case 7: // fdivr
-                res = val / st0;
-                setST(0, res);
-                break;
-            default:
-                return;
+            case 0: setST(0, st0 + val); break;
+            case 1: setST(0, st0 * val); break;
+            case 2: compare(st0, val); break;
+            case 3: comparePop(st0, val); break;
+            case 4: setST(0, st0 - val); break;
+            case 5: setST(0, val - st0); break;
+            case 6: setST(0, st0 / val); break;
+            case 7: setST(0, val / st0); break;
+            default: break;
         }
-        status = (short)(status & 0xFF00);
     }
 
     private void d9_mem(int op, int reg, SegOfs addr) {
         switch (reg) {
-            case 0: // FLD m32real
-                push(readReal32(addr));
-                break;
-            case 1: // FST m32real
-                writeReal32(addr, getST(0));
-                break;
-            case 2: // FSTP m32real
-                writeReal32(addr, getST(0));
-                pop();
-                break;
-            case 3:
-                writeReal64(addr, getST(0));
-                pop();
-                break;
-            case 4: // FLDENV
-                break;
-            case 5: // FLDCW
-                control = cpu.getMemory().readWord(addr);
-                break;
-            case 6: // FSTENV
-                break;
-            case 7: // FSTCW
-                cpu.getMemory().writeWord(addr, control);
-                break;
-            default:
-                break;
+            case 0: push(readReal32(addr)); break;
+            case 1: writeReal32(addr, getST(0)); break;
+            case 2: writeReal32(addr, getST(0)); pop(); break;
+            case 3: writeReal64(addr, getST(0)); pop(); break;
+            case 4: storeEnv(addr); break;
+            case 5: control = cpu.getMemory().readWord(addr); break;
+            case 6: loadEnv(addr); break;
+            case 7: cpu.getMemory().writeWord(addr, control); break;
+            default: break;
         }
     }
 
-
     private void da_mem(int op, int reg, SegOfs addr) {
+        double st0 = getST(0);
+        switch (reg) {
+            case 0: push(readInteger32(addr)); break;
+            case 1: writeInteger32(addr, (int) Math.round(st0)); break;
+            case 2: writeInteger32(addr, (int) Math.round(st0)); pop(); break;
+            default: break;
+        }
     }
 
     private void db_mem(int op, int reg, SegOfs addr) {
+        double st0 = getST(0);
+        switch (reg) {
+            case 0: push(readInteger16(addr)); break;
+            case 1: writeInteger16(addr, (short) Math.round(st0)); break;
+            case 2: writeInteger16(addr, (short) Math.round(st0)); pop(); break;
+            case 3: push(readInteger32(addr)); break;
+            case 4: writeInteger32(addr, (int) Math.round(st0)); break;
+            case 5: writeInteger32(addr, (int) Math.round(st0)); pop(); break;
+            case 6: storeEnv(addr); break;
+            case 7: loadEnv(addr); break;
+            default: break;
+        }
     }
 
     private void dc_mem(int op, int reg, SegOfs addr) {
@@ -256,30 +339,42 @@ public class FPU8087 {
             case 1: setST(0, st0 - val); break;
             case 2: setST(0, st0 * val); break;
             case 3: setST(0, st0 / val); break;
-            default: return;
+            default: break;
         }
-        status = (short)(status & 0xFF00);
     }
 
     private void dd_mem(int op, int reg, SegOfs addr) {
+        double st0 = getST(0);
+        switch (reg) {
+            case 0: push(readInteger64(addr)); break;
+            case 1: writeInteger64(addr, Math.round(st0)); break;
+            case 2: writeInteger64(addr, Math.round(st0)); pop(); break;
+            case 3: break;
+            case 4: writeReal64(addr, getST(0)); pop(); break;
+            default: break;
+        }
     }
 
     private void de_mem(int op, int reg, SegOfs addr) {
-        double val = readReal64(addr);
         double st0 = getST(0);
         switch (reg) {
-            case 0: setST(0, st0 + val); break;
-            case 1: setST(0, st0 - val); break;
-            case 2: setST(0, st0 * val); break;
-            case 3: setST(0, st0 / val); break;
-            default: return;
+            case 0: push(readInteger16(addr)); break;
+            case 1: writeInteger16(addr, (short) Math.round(st0)); break;
+            case 2: writeInteger16(addr, (short) Math.round(st0)); pop(); break;
+            case 3: compare(st0, readInteger16(addr)); break;
+            case 4: comparePop(st0, readInteger16(addr)); break;
+            default: break;
         }
-        status = (short)(status & 0xFF00);
     }
 
     private void df_mem(int op, int reg, SegOfs addr) {
-        if (reg == 7) {
-            cpu.getMemory().writeWord(addr, status);
+        double st0 = getST(0);
+        switch (reg) {
+            case 0: push(readInteger64(addr)); break;
+            case 1: writeInteger64(addr, Math.round(st0)); break;
+            case 2: writeInteger64(addr, Math.round(st0)); pop(); break;
+            case 7: cpu.getMemory().writeWord(addr, status); break;
+            default: break;
         }
     }
 
@@ -287,49 +382,30 @@ public class FPU8087 {
         int i = rm;
         double st0 = getST(0);
         double sti = getST(i);
-        double res = 0;
-        if (reg == 0) {
-            res = st0 + sti;
-        } else if (reg == 1) {
-            res = st0 - sti;
-        } else if (reg == 2) {
-            res = st0 * sti;
-        } else if (reg == 3) {
-            res = st0 / sti;
-        } else {
-            return;
+        switch (reg) {
+            case 0: setST(0, st0 + sti); break;
+            case 1: setST(0, st0 - sti); break;
+            case 2: setST(0, st0 * sti); break;
+            case 3: setST(0, st0 / sti); break;
+            default: break;
         }
-        setST(0, res);
-        status = (short)(status & 0xFF00);
     }
 
     private void d9_reg(int op, int reg, int rm) {
         if (reg == 0) {
             switch (rm) {
-                case 0: // fchs
-                    setST(0, -getST(0));
-                    break;
-                case 1: // fabs
-                    setST(0, Math.abs(getST(0)));
-                    break;
-                case 4: // ftst
-                    compare(getST(0), 0.0);
-                    break;
-                case 5: // fld1
-                    push(1.0);
-                    break;
-                case 6: // fldz
-                    push(0.0);
-                    break;
-                default:
-                    break;
+                case 0: setST(0, -getST(0)); break;
+                case 1: setST(0, Math.abs(getST(0))); break;
+                case 4: compare(getST(0), 0.0); break;
+                case 5: push(1.0); break;
+                case 6: push(0.0); break;
+                default: break;
             }
         } else if (reg == 5 && rm == 0) {
             cpu.getReg().AX.setValue(control);
         } else if (reg == 7 && rm == 0) {
             cpu.getReg().AX.setValue(status);
         }
-        status = (short)(status & 0xFF00);
     }
 
     private void da_reg(int op, int reg, int rm) {
@@ -338,8 +414,6 @@ public class FPU8087 {
     private void db_reg(int op, int reg, int rm) {
         if (reg == 7 && rm == 3) {
             reset();
-        } else if (reg == 7 && rm == 0) {
-            // fnop
         }
     }
 
@@ -347,68 +421,35 @@ public class FPU8087 {
         int i = rm;
         double st0 = getST(0);
         double sti = getST(i);
-        double res = 0;
-        if (reg == 0) {
-            res = sti + st0;
-        } else if (reg == 1) {
-            res = sti - st0;
-        } else if (reg == 2) {
-            res = sti * st0;
-        } else if (reg == 3) {
-            res = sti / st0;
-        } else {
-            return;
+        switch (reg) {
+            case 0: setST(i, sti + st0); break;
+            case 1: setST(i, sti - st0); break;
+            case 2: setST(i, sti * st0); break;
+            case 3: setST(i, sti / st0); break;
+            default: break;
         }
-        setST(i, res);
-        status = (short)(status & 0xFF00);
     }
 
     private void dd_reg(int op, int reg, int rm) {
     }
 
     private void de_reg(int op, int reg, int rm) {
-        if (reg == 0) {
+        if (reg >= 0 && reg <= 7) {
+            int i = rm;
             double st0 = getST(0);
-            double sti = getST(rm);
-            setST(0, st0 + sti);
-            pop();
-        } else if (reg == 1) {
-            double st0 = getST(0);
-            double sti = getST(rm);
-            setST(0, st0 - sti);
-            pop();
-        } else if (reg == 2) {
-            double st0 = getST(0);
-            double sti = getST(rm);
-            setST(0, st0 * sti);
-            pop();
-        } else if (reg == 3) {
-            double st0 = getST(0);
-            double sti = getST(rm);
-            setST(0, st0 / sti);
-            pop();
-        } else if (reg == 4) {
-            double st0 = getST(0);
-            double sti = getST(rm);
-            setST(0, st0 + sti);
-            pop();
-        } else if (reg == 5) {
-            double st0 = getST(0);
-            double sti = getST(rm);
-            setST(0, st0 - sti);
-            pop();
-        } else if (reg == 6) {
-            double st0 = getST(0);
-            double sti = getST(rm);
-            setST(0, st0 * sti);
-            pop();
-        } else if (reg == 7) {
-            double st0 = getST(0);
-            double sti = getST(rm);
-            setST(0, st0 / sti);
-            pop();
+            double sti = getST(i);
+            switch (reg) {
+                case 0: setST(0, st0 + sti); pop(); break;
+                case 1: setST(0, st0 - sti); pop(); break;
+                case 2: setST(0, st0 * sti); pop(); break;
+                case 3: setST(0, st0 / sti); pop(); break;
+                case 4: setST(0, st0 + sti); pop(); break;
+                case 5: setST(0, st0 - sti); pop(); break;
+                case 6: setST(0, st0 * sti); pop(); break;
+                case 7: setST(0, st0 / sti); pop(); break;
+                default: break;
+            }
         }
-        status = (short)(status & 0xFF00);
     }
 
     private void df_reg(int op, int reg, int rm) {

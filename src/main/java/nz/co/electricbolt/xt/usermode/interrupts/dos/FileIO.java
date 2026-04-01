@@ -34,7 +34,7 @@ public class FileIO {
     public FileIO() {
         fileHandleMap.put(fileHandleCount++, new CONFile(AccessMode.readOnly, SharingMode.denyWrite, true)); // STDIN - keyboard.
         fileHandleMap.put(fileHandleCount++, new CONFile(AccessMode.writeOnly, SharingMode.denyRead, true)); // STDOUT - screen.
-        fileHandleMap.put(fileHandleCount++, new CONFile(AccessMode.writeOnly, SharingMode.denyNone, true)); // STDERR - screen.
+        fileHandleMap.put(fileHandleCount++, new CONFile(AccessMode.writeOnly, SharingMode.denyNone, true, true)); // STDERR - screen.
         fileHandleMap.put(fileHandleCount++, new CONFile(AccessMode.writeOnly, SharingMode.denyRead, true)); // STDAUX - first serial port.
         fileHandleMap.put(fileHandleCount++, new CONFile(AccessMode.writeOnly, SharingMode.denyRead, true)); // STDPRN - first printer port.
 

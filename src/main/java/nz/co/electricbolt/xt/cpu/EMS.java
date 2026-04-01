@@ -1,0 +1,169 @@
+package nz.co.electricbolt.xt.cpu;
+
+import java.util.BitSet;
+import java.util.HashMap;
+import java.util.Map;
+
+public class EMS {
+
+    private static final int PAGE_SIZE = 0x4000;
+    private static final int PAGE_FRAME_PAGES = 4;
+    private static final int PAGE_FRAME_SEGMENT = 0xE000;
+    private static final int PAGE_FRAME_SEGMENT_STEP = 0x0400;
+
+    private final byte[] emsMemory;
+    private final BitSet freePhysicalPages;
+    private final Map<Integer, HandleInfo> handles;
+    private final int[] pageFrameMappings;
+    private int nextHandle;
+
+    private static EMS instance;
+
+    public EMS(int totalMemoryKB) {
+        int totalPages = (totalMemoryKB * 1024) / PAGE_SIZE;
+        emsMemory = new byte[totalPages * PAGE_SIZE];
+        freePhysicalPages = new BitSet(totalPages);
+        freePhysicalPages.set(0, totalPages);
+        handles = new HashMap<>();
+        pageFrameMappings = new int[PAGE_FRAME_PAGES];
+        for (int i = 0; i < PAGE_FRAME_PAGES; i++) {
+            pageFrameMappings[i] = -1;
+        }
+        nextHandle = 1;
+    }
+
+    public int getPageFrameSegment() {
+        return PAGE_FRAME_SEGMENT;
+    }
+
+    public int getVersion() {
+        return 0x0400;
+    }
+
+    public int getTotalPages() {
+        return emsMemory.length / PAGE_SIZE;
+    }
+
+    public int getFreePages() {
+        return freePhysicalPages.cardinality();
+    }
+
+    public int allocatePages(int pages, int[] handleOut) {
+        if (pages <= 0) return 0x80;
+        if (freePhysicalPages.cardinality() < pages) return 0x87;
+        int handle = nextHandle++;
+        int[] physicalPages = new int[pages];
+        int found = 0;
+        for (int i = 0; i < freePhysicalPages.size() && found < pages; i++) {
+            if (freePhysicalPages.get(i)) {
+                physicalPages[found] = i;
+                found++;
+            }
+        }
+        for (int i = 0; i < pages; i++) {
+            freePhysicalPages.clear(physicalPages[i]);
+        }
+        HandleInfo info = new HandleInfo();
+        info.pages = pages;
+        info.physicalPages = physicalPages;
+        handles.put(handle, info);
+        handleOut[0] = handle;
+        return 0;
+    }
+
+    public int freePages(int handle) {
+        HandleInfo info = handles.remove(handle);
+        if (info == null) return 0x83;
+        for (int i = 0; i < info.pages; i++) {
+            freePhysicalPages.set(info.physicalPages[i]);
+        }
+        for (int i = 0; i < PAGE_FRAME_PAGES; i++) {
+            if (pageFrameMappings[i] == handle) {
+                pageFrameMappings[i] = -1;
+            }
+        }
+        return 0;
+    }
+
+    public int getHandlePages(int handle, int[] pagesOut) {
+        HandleInfo info = handles.get(handle);
+        if (info == null) return 0x83;
+        pagesOut[0] = info.pages;
+        return 0;
+    }
+
+    public int mapPage(int handle, int logicalPage, int physicalPageFrame) {
+        if (physicalPageFrame < 0 || physicalPageFrame >= PAGE_FRAME_PAGES) return 0x8A;
+        HandleInfo info = handles.get(handle);
+        if (info == null) return 0x83;
+        if (logicalPage < 0 || logicalPage >= info.pages) return 0x8B;
+        int physicalPage = info.physicalPages[logicalPage];
+        pageFrameMappings[physicalPageFrame] = physicalPage;
+        return 0;
+    }
+
+    public int unmapPage(int physicalPageFrame) {
+        if (physicalPageFrame < 0 || physicalPageFrame >= PAGE_FRAME_PAGES) return 0x8A;
+        pageFrameMappings[physicalPageFrame] = -1;
+        return 0;
+    }
+
+    public boolean isPageFrameSegment(int segment) {
+        int diff = segment - PAGE_FRAME_SEGMENT;
+        if (diff < 0) return false;
+        if (diff >= PAGE_FRAME_PAGES * PAGE_FRAME_SEGMENT_STEP) return false;
+        return (diff % PAGE_FRAME_SEGMENT_STEP) == 0;
+    }
+
+    public int readByte(int linearAddress) {
+        int segment = (linearAddress >> 4) & 0xFFFF;
+        int offset = linearAddress & 0xFFFF;
+        int pageFrameIndex = (segment - PAGE_FRAME_SEGMENT) / PAGE_FRAME_SEGMENT_STEP;
+        if (pageFrameIndex < 0 || pageFrameIndex >= PAGE_FRAME_PAGES) {
+            return -1;
+        }
+        int physicalPage = pageFrameMappings[pageFrameIndex];
+        if (physicalPage == -1) {
+            return -1;
+        }
+        int pageOffset = offset;
+        int addr = physicalPage * PAGE_SIZE + pageOffset;
+        if (addr >= emsMemory.length) {
+            return -1;
+        }
+        return emsMemory[addr] & 0xFF;
+    }
+
+    public void writeByte(int linearAddress, int value) {
+        int segment = (linearAddress >> 4) & 0xFFFF;
+        int offset = linearAddress & 0xFFFF;
+        int pageFrameIndex = (segment - PAGE_FRAME_SEGMENT) / PAGE_FRAME_SEGMENT_STEP;
+        if (pageFrameIndex < 0 || pageFrameIndex >= PAGE_FRAME_PAGES) {
+            return;
+        }
+        int physicalPage = pageFrameMappings[pageFrameIndex];
+        if (physicalPage == -1) {
+            return;
+        }
+        int pageOffset = offset;
+        int addr = physicalPage * PAGE_SIZE + pageOffset;
+        if (addr >= emsMemory.length) {
+            return;
+        }
+        emsMemory[addr] = (byte) (value & 0xFF);
+    }
+
+    private static class HandleInfo {
+        int pages;
+        int[] physicalPages;
+    }
+
+    public static void init(int totalMemoryKB) {
+        instance = new EMS(totalMemoryKB);
+    }
+
+    public static EMS getInstance() {
+        return instance;
+    }
+
+}

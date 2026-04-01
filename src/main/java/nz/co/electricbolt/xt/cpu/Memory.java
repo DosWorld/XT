@@ -14,10 +14,15 @@ public class Memory {
     final byte[] buf = new byte[MEMORY_SIZE];
     final byte[] permissions = new byte[MEMORY_SIZE];
     final CPU cpu;
+    private EMS ems;
 
     public Memory(final CPU cpu) {
         this.cpu = cpu;
         applyPermission(0, MEMORY_SIZE, (byte) (PERMISSION_EXECUTE | PERMISSION_READ | PERMISSION_WRITE));
+    }
+
+    public void setEMS(EMS ems) {
+        this.ems = ems;
     }
 
     public String fromBitmask(final byte permissionBitmask) {
@@ -173,11 +178,17 @@ public class Memory {
      */
     public byte readByte(final SegOfs segOfs) {
         int address = segOfs.toLinearAddress();
+        if (ems != null && ems.isPageFrameSegment(segOfs.getSegment())) {
+            int emsValue = ems.readByte(address);
+            if (emsValue != -1) {
+                return (byte) emsValue;
+            }
+        }
         byte value = buf[address];
         if ((permissions[address] & Memory.PERMISSION_READ) == 0) {
             cpu.delegate.invalidMemoryAccess(segOfs, Memory.PERMISSION_READ);
         }
-	cpu.checkMemoryReadWatchpoint(segOfs); 
+        cpu.checkMemoryReadWatchpoint(segOfs);
         return value;
     }
 
@@ -202,12 +213,17 @@ public class Memory {
      * of the address space at 0x00000. Invokes delegate.invalidMemoryAccess() if the memory address is not writable
      * (Memory.PERMISSION_WRITE).
      */
+
     public void writeByte(final SegOfs segOfs, final byte value) {
         int address = segOfs.toLinearAddress();
+        if (ems != null && ems.isPageFrameSegment(segOfs.getSegment())) {
+            ems.writeByte(address, value & 0xFF);
+            return;
+        }
         if ((permissions[address] & Memory.PERMISSION_WRITE) == 0) {
             cpu.delegate.invalidMemoryAccess(segOfs, Memory.PERMISSION_WRITE);
         }
-	cpu.checkMemoryWriteWatchpoint(segOfs);    
+        cpu.checkMemoryWriteWatchpoint(segOfs);
         buf[address] = value;
     }
 

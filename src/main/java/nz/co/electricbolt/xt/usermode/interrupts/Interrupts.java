@@ -8,6 +8,7 @@ import nz.co.electricbolt.xt.usermode.interrupts.annotations.*;
 import nz.co.electricbolt.xt.usermode.util.DirectoryTranslation;
 import nz.co.electricbolt.xt.usermode.util.MemoryUtil;
 import nz.co.electricbolt.xt.usermode.util.Trace;
+import nz.co.electricbolt.xt.cpu.EMS;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
@@ -63,6 +64,7 @@ import java.util.TreeMap;
 public class Interrupts {
 
     private final Map<String, InterruptImpl> implMap;
+    private static EMS instance;
 
     public Interrupts() {
         this.implMap = new TreeMap<>();
@@ -76,6 +78,7 @@ public class Interrupts {
         loadClass("dos.Memory");
         loadClass("dos.TimeDate");
         loadClass("dos.TerminateProgram");
+        loadClass("dos.MemoryManagement");
     }
 
     /**
@@ -381,5 +384,13 @@ public class Interrupts {
 
     private record InterruptImpl(String key, int interrupt, int function, int subfunction, String description,
                                  Object instance, Method clazzMethod) {
+    }
+
+    public static void init(int sizeKB) {
+        instance = new EMS(sizeKB);
+    }
+
+    public static EMS getInstance() {
+        return instance;
     }
 }

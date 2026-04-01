@@ -11,6 +11,8 @@ import nz.co.electricbolt.xt.usermode.util.DirectoryTranslation;
 import nz.co.electricbolt.xt.usermode.util.MemoryUtil;
 import nz.co.electricbolt.xt.usermode.util.Trace;
 import java.util.List;
+import nz.co.electricbolt.xt.cpu.EMS;
+import nz.co.electricbolt.xt.usermode.interrupts.dos.EMSManagement;
 
 public class ProgramRunner implements CPUDelegate {
 
@@ -69,6 +71,9 @@ public class ProgramRunner implements CPUDelegate {
     }
 
     public void loadAndExecute() {
+        EMS.init(16 * 1024);
+        cpu.getMemory().setEMS(EMS.getInstance());
+
         final EnvironmentVariables environment = new EnvironmentVariables(cpu.getMemory(), (short) 0x0050, (short) 0x0000);
         environment.writeVariable("PATH", "C:\\");
         environment.writeExecutablePath(directoryTranslation.hostPathToEmulatedPath(programPath));
