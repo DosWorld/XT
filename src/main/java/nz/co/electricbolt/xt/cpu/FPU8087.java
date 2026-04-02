@@ -34,14 +34,29 @@ public class FPU8087 {
     }
 
     private double getST(int i) {
-        return st[sti(i)];
+        int idx = sti(i);
+        if (tag[idx] == 0) {
+            status |= 0x0400;
+            status |= 0x0100;
+            return Double.NaN;
+        }
+        return st[idx];
     }
 
-    private void setST(int i, double val) {
+    private void writeST(int i, double val) {
         int idx = sti(i);
         st[idx] = val;
         tag[idx] = 1;
-        status &= 0xFF00;
+    }
+
+    private void setST(int i, double val) {
+        writeST(i, val);
+        status &= 0xFCFF;
+        if (Double.isNaN(val)) {
+            status |= 0x0400;
+        } else if (val < 0) {
+            status |= 0x0200;
+        }
     }
 
     private void push(double val) {
@@ -57,11 +72,11 @@ public class FPU8087 {
     }
 
     private void compare(double a, double b) {
-        status &= 0xFF00;
+        status &= 0xFCFF;
         if (Double.isNaN(a) || Double.isNaN(b)) {
             status |= 0x0100;
-            status |= 0x4000;
             status |= 0x0400;
+            status |= 0x4000;
             return;
         }
         if (a < b) {
@@ -79,35 +94,71 @@ public class FPU8087 {
     }
 
     private void addST(int i) {
+        status &= 0xFCFF;
         setST(0, getST(0) + getST(i));
     }
 
     private void subST(int i) {
+        status &= 0xFCFF;
         setST(0, getST(0) - getST(i));
     }
 
     private void mulST(int i) {
+        status &= 0xFCFF;
         setST(0, getST(0) * getST(i));
     }
 
     private void divST(int i) {
-        setST(0, getST(0) / getST(i));
+        status &= 0xFCFF;
+        double divisor = getST(i);
+        double dividend = getST(0);
+        if (divisor == 0) {
+            if (dividend == 0) {
+                status |= 0x0400;
+                status |= 0x0100;
+                status |= 0x4000;
+                writeST(0, Double.NaN);
+            } else {
+                status |= 0x0200;
+                writeST(0, dividend < 0 ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+            }
+        } else {
+            setST(0, dividend / divisor);
+        }
     }
 
     private void addSTi(int i) {
+        status &= 0xFCFF;
         setST(i, getST(i) + getST(0));
     }
 
     private void subSTi(int i) {
+        status &= 0xFCFF;
         setST(i, getST(i) - getST(0));
     }
 
     private void mulSTi(int i) {
+        status &= 0xFCFF;
         setST(i, getST(i) * getST(0));
     }
 
     private void divSTi(int i) {
-        setST(i, getST(i) / getST(0));
+        status &= 0xFCFF;
+        double divisor = getST(i);
+        double dividend = getST(0);
+        if (divisor == 0) {
+            if (dividend == 0) {
+                status |= 0x0400;
+                status |= 0x0100;
+                status |= 0x4000;
+                writeST(i, Double.NaN);
+            } else {
+                status |= 0x0200;
+                writeST(i, dividend < 0 ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+            }
+        } else {
+            setST(i, dividend / divisor);
+        }
     }
 
     private void addPop(int i) {
@@ -207,6 +258,14 @@ public class FPU8087 {
             tagWord |= (tag[i] << (i * 2));
         }
         cpu.getMemory().writeWord(addr, tagWord);
+        addr.addOffset((short) 2);
+        cpu.getMemory().writeWord(addr, (short) 0);
+        addr.addOffset((short) 2);
+        cpu.getMemory().writeWord(addr, (short) 0);
+        addr.addOffset((short) 2);
+        cpu.getMemory().writeWord(addr, (short) 0);
+        addr.addOffset((short) 2);
+        cpu.getMemory().writeWord(addr, (short) 0);
     }
 
     private void loadEnv(SegOfs addr) {
@@ -218,6 +277,9 @@ public class FPU8087 {
         for (int i = 0; i < 8; i++) {
             tag[i] = (tagWord >> (i * 2)) & 3;
         }
+        addr.addOffset((short) 2);
+        addr.addOffset((short) 4);
+        addr.addOffset((short) 4);
         top = (status >> 11) & 7;
     }
 
@@ -280,14 +342,42 @@ public class FPU8087 {
         double val = readReal32(addr);
         double st0 = getST(0);
         switch (reg) {
-            case 0: setST(0, st0 + val); break;
-            case 1: setST(0, st0 * val); break;
+            case 0: status &= 0xFCFF; setST(0, st0 + val); break;
+            case 1: status &= 0xFCFF; setST(0, st0 * val); break;
             case 2: compare(st0, val); break;
             case 3: comparePop(st0, val); break;
-            case 4: setST(0, st0 - val); break;
-            case 5: setST(0, val - st0); break;
-            case 6: setST(0, st0 / val); break;
-            case 7: setST(0, val / st0); break;
+            case 4: status &= 0xFCFF; setST(0, st0 - val); break;
+            case 5: status &= 0xFCFF; setST(0, val - st0); break;
+            case 6: status &= 0xFCFF;
+                if (val == 0) {
+                    if (st0 == 0) {
+                        status |= 0x0400;
+                        status |= 0x0100;
+                        status |= 0x4000;
+                        writeST(0, Double.NaN);
+                    } else {
+                        status |= 0x0200;
+                        writeST(0, st0 < 0 ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                    }
+                } else {
+                    setST(0, st0 / val);
+                }
+                break;
+            case 7: status &= 0xFCFF;
+                if (st0 == 0) {
+                    if (val == 0) {
+                        status |= 0x0400;
+                        status |= 0x0100;
+                        status |= 0x4000;
+                        writeST(0, Double.NaN);
+                    } else {
+                        status |= 0x0200;
+                        writeST(0, val < 0 ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                    }
+                } else {
+                    setST(0, val / st0);
+                }
+                break;
             default: break;
         }
     }
@@ -335,10 +425,24 @@ public class FPU8087 {
         double val = readReal64(addr);
         double st0 = getST(0);
         switch (reg) {
-            case 0: setST(0, st0 + val); break;
-            case 1: setST(0, st0 - val); break;
-            case 2: setST(0, st0 * val); break;
-            case 3: setST(0, st0 / val); break;
+            case 0: status &= 0xFCFF; setST(0, st0 + val); break;
+            case 1: status &= 0xFCFF; setST(0, st0 - val); break;
+            case 2: status &= 0xFCFF; setST(0, st0 * val); break;
+            case 3: status &= 0xFCFF;
+                if (val == 0) {
+                    if (st0 == 0) {
+                        status |= 0x0400;
+                        status |= 0x0100;
+                        status |= 0x4000;
+                        writeST(0, Double.NaN);
+                    } else {
+                        status |= 0x0200;
+                        writeST(0, st0 < 0 ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                    }
+                } else {
+                    setST(0, st0 / val);
+                }
+                break;
             default: break;
         }
     }
@@ -383,10 +487,24 @@ public class FPU8087 {
         double st0 = getST(0);
         double sti = getST(i);
         switch (reg) {
-            case 0: setST(0, st0 + sti); break;
-            case 1: setST(0, st0 - sti); break;
-            case 2: setST(0, st0 * sti); break;
-            case 3: setST(0, st0 / sti); break;
+            case 0: status &= 0xFCFF; setST(0, st0 + sti); break;
+            case 1: status &= 0xFCFF; setST(0, st0 - sti); break;
+            case 2: status &= 0xFCFF; setST(0, st0 * sti); break;
+            case 3: status &= 0xFCFF;
+                if (sti == 0) {
+                    if (st0 == 0) {
+                        status |= 0x0400;
+                        status |= 0x0100;
+                        status |= 0x4000;
+                        writeST(0, Double.NaN);
+                    } else {
+                        status |= 0x0200;
+                        writeST(0, st0 < 0 ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                    }
+                } else {
+                    setST(0, st0 / sti);
+                }
+                break;
             default: break;
         }
     }
@@ -394,8 +512,8 @@ public class FPU8087 {
     private void d9_reg(int op, int reg, int rm) {
         if (reg == 0) {
             switch (rm) {
-                case 0: setST(0, -getST(0)); break;
-                case 1: setST(0, Math.abs(getST(0))); break;
+                case 0: status &= 0xFCFF; setST(0, -getST(0)); break;
+                case 1: status &= 0xFCFF; setST(0, Math.abs(getST(0))); break;
                 case 4: compare(getST(0), 0.0); break;
                 case 5: push(1.0); break;
                 case 6: push(0.0); break;
@@ -422,10 +540,24 @@ public class FPU8087 {
         double st0 = getST(0);
         double sti = getST(i);
         switch (reg) {
-            case 0: setST(i, sti + st0); break;
-            case 1: setST(i, sti - st0); break;
-            case 2: setST(i, sti * st0); break;
-            case 3: setST(i, sti / st0); break;
+            case 0: status &= 0xFCFF; setST(i, sti + st0); break;
+            case 1: status &= 0xFCFF; setST(i, sti - st0); break;
+            case 2: status &= 0xFCFF; setST(i, sti * st0); break;
+            case 3: status &= 0xFCFF;
+                if (st0 == 0) {
+                    if (sti == 0) {
+                        status |= 0x0400;
+                        status |= 0x0100;
+                        status |= 0x4000;
+                        writeST(i, Double.NaN);
+                    } else {
+                        status |= 0x0200;
+                        writeST(i, sti < 0 ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                    }
+                } else {
+                    setST(i, sti / st0);
+                }
+                break;
             default: break;
         }
     }
@@ -438,15 +570,46 @@ public class FPU8087 {
             int i = rm;
             double st0 = getST(0);
             double sti = getST(i);
+            status &= 0xFCFF;
             switch (reg) {
                 case 0: setST(0, st0 + sti); pop(); break;
                 case 1: setST(0, st0 - sti); pop(); break;
                 case 2: setST(0, st0 * sti); pop(); break;
-                case 3: setST(0, st0 / sti); pop(); break;
+                case 3:
+                    if (sti == 0) {
+                        if (st0 == 0) {
+                            status |= 0x0400;
+                            status |= 0x0100;
+                            status |= 0x4000;
+                            writeST(0, Double.NaN);
+                        } else {
+                            status |= 0x0200;
+                            writeST(0, st0 < 0 ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                        }
+                    } else {
+                        setST(0, st0 / sti);
+                    }
+                    pop();
+                    break;
                 case 4: setST(0, st0 + sti); pop(); break;
                 case 5: setST(0, st0 - sti); pop(); break;
                 case 6: setST(0, st0 * sti); pop(); break;
-                case 7: setST(0, st0 / sti); pop(); break;
+                case 7:
+                    if (sti == 0) {
+                        if (st0 == 0) {
+                            status |= 0x0400;
+                            status |= 0x0100;
+                            status |= 0x4000;
+                            writeST(0, Double.NaN);
+                        } else {
+                            status |= 0x0200;
+                            writeST(0, st0 < 0 ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY);
+                        }
+                    } else {
+                        setST(0, st0 / sti);
+                    }
+                    pop();
+                    break;
                 default: break;
             }
         }
