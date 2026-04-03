@@ -124,7 +124,7 @@ public class CPU {
             reg.flags.isOverflow() ? 'O' : '-'
         );
         String disasm = disassembler.disassemble();
-        System.out.printf("%04X:%04X [%s] [%-16s] AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X BP=%04X DS=%04X ES=%04X SS=%04X SP=%04X FLAGS=%s%n",
+        System.out.printf("%04X:%04X | %s | %-24s | AX=%04X,BX=%04X,CX=%04X,DX=%04X,SI=%04X,DI=%04X,BP=%04X,DS=%04X,ES=%04X | SS:SP=%04X:%04X | FLAGS=%s%n",
             cs & 0xFFFF,
             ip & 0xFFFF,
             bytes.toString(),

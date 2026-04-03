@@ -43,35 +43,43 @@ public class Disassembler {
         return prefixStr + inner;
     }
 
+    private String hexByte(int b) {
+        return String.format("0x%02X", b & 0xFF);
+    }
+
+    private String hexWord(int w) {
+        return String.format("0x%04X", w & 0xFFFF);
+    }
+
     private String disassembleOpcode(byte opcode) {
         int b = opcode & 0xFF;
         switch (b) {
             // MOV
-            case 0x88: return mov_r_m8();    // mov r/m8, r8
-            case 0x89: return mov_r_m16();   // mov r/m16, r16
-            case 0x8A: return mov_r8_r_m();  // mov r8, r/m8
-            case 0x8B: return mov_r16_r_m(); // mov r16, r/m16
-            case 0x8C: return mov_r_m_sreg();// mov r/m16, sreg
-            case 0x8E: return mov_sreg_r_m();// mov sreg, r/m16
-            case 0xA0: return mov_al_moffs();// mov al, [seg:offset]
-            case 0xA1: return mov_ax_moffs();// mov ax, [seg:offset]
-            case 0xA2: return mov_moffs_al();// mov [seg:offset], al
-            case 0xA3: return mov_moffs_ax();// mov [seg:offset], ax
+            case 0x88: return mov_r_m8();
+            case 0x89: return mov_r_m16();
+            case 0x8A: return mov_r8_r_m();
+            case 0x8B: return mov_r16_r_m();
+            case 0x8C: return mov_r_m_sreg();
+            case 0x8E: return mov_sreg_r_m();
+            case 0xA0: return mov_al_moffs();
+            case 0xA1: return mov_ax_moffs();
+            case 0xA2: return mov_moffs_al();
+            case 0xA3: return mov_moffs_ax();
             case 0xB0: case 0xB1: case 0xB2: case 0xB3:
             case 0xB4: case 0xB5: case 0xB6: case 0xB7:
                 return mov_imm8(b);
             case 0xB8: case 0xB9: case 0xBA: case 0xBB:
             case 0xBC: case 0xBD: case 0xBE: case 0xBF:
                 return mov_imm16(b);
-            case 0xC6: return mov_r_m8_imm8(); // mov r/m8, imm8
-            case 0xC7: return mov_r_m16_imm16();// mov r/m16, imm16
+            case 0xC6: return mov_r_m8_imm8();
+            case 0xC7: return mov_r_m16_imm16();
             // ADD
-            case 0x00: return add_r_m8();      // add r/m8, r8
-            case 0x01: return add_r_m16();     // add r/m16, r16
-            case 0x02: return add_r8_r_m();    // add r8, r/m8
-            case 0x03: return add_r16_r_m();   // add r16, r/m16
-            case 0x04: return add_al_imm8();   // add al, imm8
-            case 0x05: return add_ax_imm16();  // add ax, imm16
+            case 0x00: return add_r_m8();
+            case 0x01: return add_r_m16();
+            case 0x02: return add_r8_r_m();
+            case 0x03: return add_r16_r_m();
+            case 0x04: return add_al_imm8();
+            case 0x05: return add_ax_imm16();
             // ADC
             case 0x10: return adc_r_m8();
             case 0x11: return adc_r_m16();
@@ -244,9 +252,12 @@ public class Disassembler {
             case 0xAD: return "lodsw";
             case 0xAE: return "scasb";
             case 0xAF: return "scasw";
-            // NOP handled in xchg_ax_reg (case 0x90) as "nop"
+            // 8087 instructions
+            case 0xD8: case 0xD9: case 0xDA: case 0xDB:
+            case 0xDC: case 0xDD: case 0xDE: case 0xDF:
+                return disassemble8087(b);
             default:
-                return "db 0x" + Integer.toHexString(b);
+                return "db " + hexByte(b);
         }
     }
 
@@ -314,9 +325,8 @@ public class Disassembler {
         else if (rm == 5) { base = "di"; }
         else if (rm == 6) {
             if (mod == 0) {
-                // disp16 only
                 disp = fetch16() & 0xFFFF;
-                sb.append("0x").append(Integer.toHexString(disp));
+                sb.append(hexWord(disp));
                 sb.append("]");
                 return sb.toString();
             } else {
@@ -333,13 +343,13 @@ public class Disassembler {
             disp = fetch8();
             if (disp != 0) {
                 if (disp > 0) sb.append("+");
-                sb.append("0x").append(Integer.toHexString(disp & 0xFF));
+                sb.append(hexByte(disp));
             }
         } else if (mod == 2) {
             disp = fetch16();
             if (disp != 0) {
                 if ((short) disp > 0) sb.append("+");
-                sb.append("0x").append(Integer.toHexString(disp & 0xFFFF));
+                sb.append(hexWord(disp));
             }
         }
         sb.append("]");
@@ -352,100 +362,452 @@ public class Disassembler {
     private String mov_r16_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "mov " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
     private String mov_r_m_sreg() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "mov " + modRM16Operand(modrm) + ", " + segRegName(reg); }
     private String mov_sreg_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "mov " + segRegName(reg) + ", " + modRM16Operand(modrm); }
-    private String mov_al_moffs() { short offset = fetch16(); return "mov al, [0x" + Integer.toHexString(offset & 0xFFFF) + "]"; }
-    private String mov_ax_moffs() { short offset = fetch16(); return "mov ax, [0x" + Integer.toHexString(offset & 0xFFFF) + "]"; }
-    private String mov_moffs_al() { short offset = fetch16(); return "mov [0x" + Integer.toHexString(offset & 0xFFFF) + "], al"; }
-    private String mov_moffs_ax() { short offset = fetch16(); return "mov [0x" + Integer.toHexString(offset & 0xFFFF) + "], ax"; }
-    private String mov_imm8(int op) { int reg = op & 0x7; byte imm = fetch8(); return "mov " + reg8Name(reg) + ", 0x" + Integer.toHexString(imm & 0xFF); }
-    private String mov_imm16(int op) { int reg = op & 0x7; short imm = fetch16(); return "mov " + reg16Name(reg) + ", 0x" + Integer.toHexString(imm & 0xFFFF); }
-    private String mov_r_m8_imm8() { int modrm = getModRM(); byte imm = fetch8(); return "mov " + modRM8Operand(modrm) + ", 0x" + Integer.toHexString(imm & 0xFF); }
-    private String mov_r_m16_imm16() { int modrm = getModRM(); short imm = fetch16(); return "mov " + modRM16Operand(modrm) + ", 0x" + Integer.toHexString(imm & 0xFFFF); }
+    private String mov_al_moffs() { short offset = fetch16(); return "mov al, [" + hexWord(offset) + "]"; }
+    private String mov_ax_moffs() { short offset = fetch16(); return "mov ax, [" + hexWord(offset) + "]"; }
+    private String mov_moffs_al() { short offset = fetch16(); return "mov [" + hexWord(offset) + "], al"; }
+    private String mov_moffs_ax() { short offset = fetch16(); return "mov [" + hexWord(offset) + "], ax"; }
+    private String mov_imm8(int op) { int reg = op & 0x7; byte imm = fetch8(); return "mov " + reg8Name(reg) + ", " + hexByte(imm); }
+    private String mov_imm16(int op) { int reg = op & 0x7; short imm = fetch16(); return "mov " + reg16Name(reg) + ", " + hexWord(imm); }
+    private String mov_r_m8_imm8() { int modrm = getModRM(); byte imm = fetch8(); return "mov " + modRM8Operand(modrm) + ", " + hexByte(imm); }
+    private String mov_r_m16_imm16() { int modrm = getModRM(); short imm = fetch16(); return "mov " + modRM16Operand(modrm) + ", " + hexWord(imm); }
+
     private String add_r_m8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "add " + modRM8Operand(modrm) + ", " + reg8Name(reg); }
     private String add_r_m16() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "add " + modRM16Operand(modrm) + ", " + reg16Name(reg); }
     private String add_r8_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "add " + reg8Name(reg) + ", " + modRM8Operand(modrm); }
     private String add_r16_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "add " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
-    private String add_al_imm8() { byte imm = fetch8(); return "add al, 0x" + Integer.toHexString(imm & 0xFF); }
-    private String add_ax_imm16() { short imm = fetch16(); return "add ax, 0x" + Integer.toHexString(imm & 0xFFFF); }
+    private String add_al_imm8() { byte imm = fetch8(); return "add al, " + hexByte(imm); }
+    private String add_ax_imm16() { short imm = fetch16(); return "add ax, " + hexWord(imm); }
 
     private String adc_r_m8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "adc " + modRM8Operand(modrm) + ", " + reg8Name(reg); }
     private String adc_r_m16() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "adc " + modRM16Operand(modrm) + ", " + reg16Name(reg); }
     private String adc_r8_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "adc " + reg8Name(reg) + ", " + modRM8Operand(modrm); }
     private String adc_r16_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "adc " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
-    private String adc_al_imm8() { byte imm = fetch8(); return "adc al, 0x" + Integer.toHexString(imm & 0xFF); }
-    private String adc_ax_imm16() { short imm = fetch16(); return "adc ax, 0x" + Integer.toHexString(imm & 0xFFFF); }
+    private String adc_al_imm8() { byte imm = fetch8(); return "adc al, " + hexByte(imm); }
+    private String adc_ax_imm16() { short imm = fetch16(); return "adc ax, " + hexWord(imm); }
+
     private String sub_r_m8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "sub " + modRM8Operand(modrm) + ", " + reg8Name(reg); }
     private String sub_r_m16() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "sub " + modRM16Operand(modrm) + ", " + reg16Name(reg); }
     private String sub_r8_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "sub " + reg8Name(reg) + ", " + modRM8Operand(modrm); }
     private String sub_r16_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "sub " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
-    private String sub_al_imm8() { byte imm = fetch8(); return "sub al, 0x" + Integer.toHexString(imm & 0xFF); }
-    private String sub_ax_imm16() { short imm = fetch16(); return "sub ax, 0x" + Integer.toHexString(imm & 0xFFFF); }
+    private String sub_al_imm8() { byte imm = fetch8(); return "sub al, " + hexByte(imm); }
+    private String sub_ax_imm16() { short imm = fetch16(); return "sub ax, " + hexWord(imm); }
+
     private String sbb_r_m8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "sbb " + modRM8Operand(modrm) + ", " + reg8Name(reg); }
     private String sbb_r_m16() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "sbb " + modRM16Operand(modrm) + ", " + reg16Name(reg); }
     private String sbb_r8_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "sbb " + reg8Name(reg) + ", " + modRM8Operand(modrm); }
     private String sbb_r16_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "sbb " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
-    private String sbb_al_imm8() { byte imm = fetch8(); return "sbb al, 0x" + Integer.toHexString(imm & 0xFF); }
-    private String sbb_ax_imm16() { short imm = fetch16(); return "sbb ax, 0x" + Integer.toHexString(imm & 0xFFFF); }
+    private String sbb_al_imm8() { byte imm = fetch8(); return "sbb al, " + hexByte(imm); }
+    private String sbb_ax_imm16() { short imm = fetch16(); return "sbb ax, " + hexWord(imm); }
+
     private String cmp_r_m8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "cmp " + modRM8Operand(modrm) + ", " + reg8Name(reg); }
     private String cmp_r_m16() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "cmp " + modRM16Operand(modrm) + ", " + reg16Name(reg); }
     private String cmp_r8_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "cmp " + reg8Name(reg) + ", " + modRM8Operand(modrm); }
     private String cmp_r16_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "cmp " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
-    private String cmp_al_imm8() { byte imm = fetch8(); return "cmp al, 0x" + Integer.toHexString(imm & 0xFF); }
-    private String cmp_ax_imm16() { short imm = fetch16(); return "cmp ax, 0x" + Integer.toHexString(imm & 0xFFFF); }
+    private String cmp_al_imm8() { byte imm = fetch8(); return "cmp al, " + hexByte(imm); }
+    private String cmp_ax_imm16() { short imm = fetch16(); return "cmp ax, " + hexWord(imm); }
+
     private String and_r_m8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "and " + modRM8Operand(modrm) + ", " + reg8Name(reg); }
     private String and_r_m16() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "and " + modRM16Operand(modrm) + ", " + reg16Name(reg); }
     private String and_r8_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "and " + reg8Name(reg) + ", " + modRM8Operand(modrm); }
     private String and_r16_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "and " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
-    private String and_al_imm8() { byte imm = fetch8(); return "and al, 0x" + Integer.toHexString(imm & 0xFF); }
-    private String and_ax_imm16() { short imm = fetch16(); return "and ax, 0x" + Integer.toHexString(imm & 0xFFFF); }
+    private String and_al_imm8() { byte imm = fetch8(); return "and al, " + hexByte(imm); }
+    private String and_ax_imm16() { short imm = fetch16(); return "and ax, " + hexWord(imm); }
+
     private String or_r_m8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "or " + modRM8Operand(modrm) + ", " + reg8Name(reg); }
     private String or_r_m16() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "or " + modRM16Operand(modrm) + ", " + reg16Name(reg); }
     private String or_r8_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "or " + reg8Name(reg) + ", " + modRM8Operand(modrm); }
     private String or_r16_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "or " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
-    private String or_al_imm8() { byte imm = fetch8(); return "or al, 0x" + Integer.toHexString(imm & 0xFF); }
-    private String or_ax_imm16() { short imm = fetch16(); return "or ax, 0x" + Integer.toHexString(imm & 0xFFFF); }
+    private String or_al_imm8() { byte imm = fetch8(); return "or al, " + hexByte(imm); }
+    private String or_ax_imm16() { short imm = fetch16(); return "or ax, " + hexWord(imm); }
+
     private String xor_r_m8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "xor " + modRM8Operand(modrm) + ", " + reg8Name(reg); }
     private String xor_r_m16() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "xor " + modRM16Operand(modrm) + ", " + reg16Name(reg); }
     private String xor_r8_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "xor " + reg8Name(reg) + ", " + modRM8Operand(modrm); }
     private String xor_r16_r_m() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "xor " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
-    private String xor_al_imm8() { byte imm = fetch8(); return "xor al, 0x" + Integer.toHexString(imm & 0xFF); }
-    private String xor_ax_imm16() { short imm = fetch16(); return "xor ax, 0x" + Integer.toHexString(imm & 0xFFFF); }
+    private String xor_al_imm8() { byte imm = fetch8(); return "xor al, " + hexByte(imm); }
+    private String xor_ax_imm16() { short imm = fetch16(); return "xor ax, " + hexWord(imm); }
+
     private String test_r_m8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "test " + modRM8Operand(modrm) + ", " + reg8Name(reg); }
     private String test_r_m16() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "test " + modRM16Operand(modrm) + ", " + reg16Name(reg); }
-    private String test_al_imm8() { byte imm = fetch8(); return "test al, 0x" + Integer.toHexString(imm & 0xFF); }
-    private String test_ax_imm16() { short imm = fetch16(); return "test ax, 0x" + Integer.toHexString(imm & 0xFFFF); }
+    private String test_al_imm8() { byte imm = fetch8(); return "test al, " + hexByte(imm); }
+    private String test_ax_imm16() { short imm = fetch16(); return "test ax, " + hexWord(imm); }
+
     private String xchg_r_m8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "xchg " + reg8Name(reg) + ", " + modRM8Operand(modrm); }
     private String xchg_r_m16() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "xchg " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
     private String xchg_ax_reg(int op) { int reg = op & 0x7; return reg == 0 ? "nop" : "xchg ax, " + reg16Name(reg); }
+
     private String inc_reg16(int op) { int reg = op & 0x7; return "inc " + reg16Name(reg); }
     private String dec_reg16(int op) { int reg = op & 0x7; return "dec " + reg16Name(reg); }
-    private String inc_dec_r_m8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; if (reg == 0) return "inc " + modRM8Operand(modrm); if (reg == 1) return "dec " + modRM8Operand(modrm); return "db 0xfe"; }
+    private String inc_dec_r_m8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; if (reg == 0) return "inc " + modRM8Operand(modrm); if (reg == 1) return "dec " + modRM8Operand(modrm); return "db 0xFE"; }
+
     private String push_reg16(int op) { int reg = op & 0x7; return "push " + reg16Name(reg); }
     private String pop_reg16(int op) { int reg = op & 0x7; return "pop " + reg16Name(reg); }
     private String pop_r_m16() { int modrm = getModRM(); return "pop " + modRM16Operand(modrm); }
-    private String jcc_rel8(String mnem) { byte disp = fetch8(); int target = startOffset + 2 + disp; return mnem + " 0x" + Integer.toHexString(target & 0xFFFF); }
-    private String jcxz_rel8() { byte disp = fetch8(); int target = startOffset + 2 + disp; return "jcxz 0x" + Integer.toHexString(target & 0xFFFF); }
-    private String loopnz() { byte disp = fetch8(); int target = startOffset + 2 + disp; return "loopnz 0x" + Integer.toHexString(target & 0xFFFF); }
-    private String loopz() { byte disp = fetch8(); int target = startOffset + 2 + disp; return "loopz 0x" + Integer.toHexString(target & 0xFFFF); }
-    private String loop() { byte disp = fetch8(); int target = startOffset + 2 + disp; return "loop 0x" + Integer.toHexString(target & 0xFFFF); }
-    private String call_rel16() { short disp = fetch16(); int target = startOffset + 3 + disp; return "call 0x" + Integer.toHexString(target & 0xFFFF); }
-    private String jmp_rel16() { short disp = fetch16(); int target = startOffset + 3 + disp; return "jmp 0x" + Integer.toHexString(target & 0xFFFF); }
-    private String jmp_ptr16_16() { short offset = fetch16(); short segment = fetch16(); return "jmp 0x" + Integer.toHexString(segment & 0xFFFF) + ":0x" + Integer.toHexString(offset & 0xFFFF); }
-    private String jmp_rel8() { byte disp = fetch8(); int target = startOffset + 2 + disp; return "jmp 0x" + Integer.toHexString(target & 0xFFFF); }
-    private String call_ptr16_16() { short offset = fetch16(); short segment = fetch16(); return "call 0x" + Integer.toHexString(segment & 0xFFFF) + ":0x" + Integer.toHexString(offset & 0xFFFF); }
-    private String ret_imm16() { short imm = fetch16(); return "ret 0x" + Integer.toHexString(imm & 0xFFFF); }
-    private String retf_imm16() { short imm = fetch16(); return "retf 0x" + Integer.toHexString(imm & 0xFFFF); }
-    private String int_imm8() { byte imm = fetch8(); return "int 0x" + Integer.toHexString(imm & 0xFF); }
+
+    private String jcc_rel8(String mnem) { byte disp = fetch8(); int target = startOffset + 2 + disp; return mnem + " " + hexWord(target); }
+    private String jcxz_rel8() { byte disp = fetch8(); int target = startOffset + 2 + disp; return "jcxz " + hexWord(target); }
+    private String loopnz() { byte disp = fetch8(); int target = startOffset + 2 + disp; return "loopnz " + hexWord(target); }
+    private String loopz() { byte disp = fetch8(); int target = startOffset + 2 + disp; return "loopz " + hexWord(target); }
+    private String loop() { byte disp = fetch8(); int target = startOffset + 2 + disp; return "loop " + hexWord(target); }
+    private String call_rel16() { short disp = fetch16(); int target = startOffset + 3 + disp; return "call " + hexWord(target); }
+    private String jmp_rel16() { short disp = fetch16(); int target = startOffset + 3 + disp; return "jmp " + hexWord(target); }
+    private String jmp_ptr16_16() { short offset = fetch16(); short segment = fetch16(); return "jmp " + hexWord(segment) + ":" + hexWord(offset); }
+    private String jmp_rel8() { byte disp = fetch8(); int target = startOffset + 2 + disp; return "jmp " + hexWord(target); }
+    private String call_ptr16_16() { short offset = fetch16(); short segment = fetch16(); return "call " + hexWord(segment) + ":" + hexWord(offset); }
+
+    private String ret_imm16() { short imm = fetch16(); return "ret " + hexWord(imm); }
+    private String retf_imm16() { short imm = fetch16(); return "retf " + hexWord(imm); }
+    private String int_imm8() { byte imm = fetch8(); return "int " + hexByte(imm); }
+
     private String lea() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "lea " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
     private String les() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "les " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
     private String lds() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return "lds " + reg16Name(reg) + ", " + modRM16Operand(modrm); }
-    private String group1_imm8() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; byte imm = fetch8(); String op = switch (reg) { case 0 -> "add"; case 1 -> "or"; case 2 -> "adc"; case 3 -> "sbb"; case 4 -> "and"; case 5 -> "sub"; case 6 -> "xor"; case 7 -> "cmp"; default -> "db"; }; return op + " " + modRM8Operand(modrm) + ", 0x" + Integer.toHexString(imm & 0xFF); }
-    private String group1_imm16() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; short imm = fetch16(); String op = switch (reg) { case 0 -> "add"; case 1 -> "or"; case 2 -> "adc"; case 3 -> "sbb"; case 4 -> "and"; case 5 -> "sub"; case 6 -> "xor"; case 7 -> "cmp"; default -> "db"; }; return op + " " + modRM16Operand(modrm) + ", 0x" + Integer.toHexString(imm & 0xFFFF); }
-    private String group1_imm8_sign() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; byte imm = fetch8(); String op = switch (reg) { case 0 -> "add"; case 1 -> "or"; case 2 -> "adc"; case 3 -> "sbb"; case 4 -> "and"; case 5 -> "sub"; case 6 -> "xor"; case 7 -> "cmp"; default -> "db"; }; return op + " " + modRM16Operand(modrm) + ", 0x" + Integer.toHexString(imm & 0xFF); }
-    private String shift_rotate8_1() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; String op = switch (reg) { case 0 -> "rol"; case 1 -> "ror"; case 2 -> "rcl"; case 3 -> "rcr"; case 4 -> "shl"; case 5 -> "shr"; case 7 -> "sar"; default -> "db"; }; return op + " " + modRM8Operand(modrm) + ", 1"; }
-    private String shift_rotate16_1() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; String op = switch (reg) { case 0 -> "rol"; case 1 -> "ror"; case 2 -> "rcl"; case 3 -> "rcr"; case 4 -> "shl"; case 5 -> "shr"; case 7 -> "sar"; default -> "db"; }; return op + " " + modRM16Operand(modrm) + ", 1"; }
-    private String shift_rotate8_cl() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; String op = switch (reg) { case 0 -> "rol"; case 1 -> "ror"; case 2 -> "rcl"; case 3 -> "rcr"; case 4 -> "shl"; case 5 -> "shr"; case 7 -> "sar"; default -> "db"; }; return op + " " + modRM8Operand(modrm) + ", cl"; }
-    private String shift_rotate16_cl() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; String op = switch (reg) { case 0 -> "rol"; case 1 -> "ror"; case 2 -> "rcl"; case 3 -> "rcr"; case 4 -> "shl"; case 5 -> "shr"; case 7 -> "sar"; default -> "db"; }; return op + " " + modRM16Operand(modrm) + ", cl"; }
-    private String group3A() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return switch (reg) { case 0 -> "test " + modRM8Operand(modrm) + ", ?"; case 2 -> "not " + modRM8Operand(modrm); case 3 -> "neg " + modRM8Operand(modrm); case 4 -> "mul " + modRM8Operand(modrm); case 5 -> "imul " + modRM8Operand(modrm); case 6 -> "div " + modRM8Operand(modrm); case 7 -> "idiv " + modRM8Operand(modrm); default -> "db 0xf6"; }; }
-    private String group3B() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return switch (reg) { case 0 -> "test " + modRM16Operand(modrm) + ", ?"; case 2 -> "not " + modRM16Operand(modrm); case 3 -> "neg " + modRM16Operand(modrm); case 4 -> "mul " + modRM16Operand(modrm); case 5 -> "imul " + modRM16Operand(modrm); case 6 -> "div " + modRM16Operand(modrm); case 7 -> "idiv " + modRM16Operand(modrm); default -> "db 0xf7"; }; }
-    private String group5() { int modrm = getModRM(); int reg = (modrm >> 3) & 7; return switch (reg) { case 0 -> "inc " + modRM16Operand(modrm); case 1 -> "dec " + modRM16Operand(modrm); case 2 -> "call " + modRM16Operand(modrm); case 3 -> "call far " + modRM16Operand(modrm); case 4 -> "jmp " + modRM16Operand(modrm); case 5 -> "jmp far " + modRM16Operand(modrm); case 6 -> "push " + modRM16Operand(modrm); default -> "db 0xff"; }; }
+
+    private String group1_imm8() {
+        int modrm = getModRM();
+        int reg = (modrm >> 3) & 7;
+        byte imm = fetch8();
+        String op = switch (reg) {
+            case 0 -> "add"; case 1 -> "or"; case 2 -> "adc"; case 3 -> "sbb";
+            case 4 -> "and"; case 5 -> "sub"; case 6 -> "xor"; case 7 -> "cmp";
+            default -> "db";
+        };
+        return op + " " + modRM8Operand(modrm) + ", " + hexByte(imm);
+    }
+
+    private String group1_imm16() {
+        int modrm = getModRM();
+        int reg = (modrm >> 3) & 7;
+        short imm = fetch16();
+        String op = switch (reg) {
+            case 0 -> "add"; case 1 -> "or"; case 2 -> "adc"; case 3 -> "sbb";
+            case 4 -> "and"; case 5 -> "sub"; case 6 -> "xor"; case 7 -> "cmp";
+            default -> "db";
+        };
+        return op + " " + modRM16Operand(modrm) + ", " + hexWord(imm);
+    }
+
+    private String group1_imm8_sign() {
+        int modrm = getModRM();
+        int reg = (modrm >> 3) & 7;
+        byte imm = fetch8();
+        String op = switch (reg) {
+            case 0 -> "add"; case 1 -> "or"; case 2 -> "adc"; case 3 -> "sbb";
+            case 4 -> "and"; case 5 -> "sub"; case 6 -> "xor"; case 7 -> "cmp";
+            default -> "db";
+        };
+        return op + " " + modRM16Operand(modrm) + ", " + hexByte(imm);
+    }
+
+    private String shift_rotate8_1() {
+        int modrm = getModRM();
+        int reg = (modrm >> 3) & 7;
+        String op = switch (reg) {
+            case 0 -> "rol"; case 1 -> "ror"; case 2 -> "rcl"; case 3 -> "rcr";
+            case 4 -> "shl"; case 5 -> "shr"; case 7 -> "sar";
+            default -> "db";
+        };
+        return op + " " + modRM8Operand(modrm) + ", 1";
+    }
+
+    private String shift_rotate16_1() {
+        int modrm = getModRM();
+        int reg = (modrm >> 3) & 7;
+        String op = switch (reg) {
+            case 0 -> "rol"; case 1 -> "ror"; case 2 -> "rcl"; case 3 -> "rcr";
+            case 4 -> "shl"; case 5 -> "shr"; case 7 -> "sar";
+            default -> "db";
+        };
+        return op + " " + modRM16Operand(modrm) + ", 1";
+    }
+
+    private String shift_rotate8_cl() {
+        int modrm = getModRM();
+        int reg = (modrm >> 3) & 7;
+        String op = switch (reg) {
+            case 0 -> "rol"; case 1 -> "ror"; case 2 -> "rcl"; case 3 -> "rcr";
+            case 4 -> "shl"; case 5 -> "shr"; case 7 -> "sar";
+            default -> "db";
+        };
+        return op + " " + modRM8Operand(modrm) + ", cl";
+    }
+
+    private String shift_rotate16_cl() {
+        int modrm = getModRM();
+        int reg = (modrm >> 3) & 7;
+        String op = switch (reg) {
+            case 0 -> "rol"; case 1 -> "ror"; case 2 -> "rcl"; case 3 -> "rcr";
+            case 4 -> "shl"; case 5 -> "shr"; case 7 -> "sar";
+            default -> "db";
+        };
+        return op + " " + modRM16Operand(modrm) + ", cl";
+    }
+
+    private String group3A() {
+        int modrm = getModRM();
+        int reg = (modrm >> 3) & 7;
+        if (reg == 0) {
+            byte imm = fetch8();
+            return "test " + modRM8Operand(modrm) + ", " + hexByte(imm);
+        }
+        return switch (reg) {
+            case 2 -> "not " + modRM8Operand(modrm);
+            case 3 -> "neg " + modRM8Operand(modrm);
+            case 4 -> "mul " + modRM8Operand(modrm);
+            case 5 -> "imul " + modRM8Operand(modrm);
+            case 6 -> "div " + modRM8Operand(modrm);
+            case 7 -> "idiv " + modRM8Operand(modrm);
+            default -> "db 0xF6";
+        };
+    }
+
+    private String group3B() {
+        int modrm = getModRM();
+        int reg = (modrm >> 3) & 7;
+        if (reg == 0) {
+            short imm = fetch16();
+            return "test " + modRM16Operand(modrm) + ", " + hexWord(imm);
+        }
+        return switch (reg) {
+            case 2 -> "not " + modRM16Operand(modrm);
+            case 3 -> "neg " + modRM16Operand(modrm);
+            case 4 -> "mul " + modRM16Operand(modrm);
+            case 5 -> "imul " + modRM16Operand(modrm);
+            case 6 -> "div " + modRM16Operand(modrm);
+            case 7 -> "idiv " + modRM16Operand(modrm);
+            default -> "db 0xF7";
+        };
+    }
+
+    private String group5() {
+        int modrm = getModRM();
+        int reg = (modrm >> 3) & 7;
+        return switch (reg) {
+            case 0 -> "inc " + modRM16Operand(modrm);
+            case 1 -> "dec " + modRM16Operand(modrm);
+            case 2 -> "call " + modRM16Operand(modrm);
+            case 3 -> "call far " + modRM16Operand(modrm);
+            case 4 -> "jmp " + modRM16Operand(modrm);
+            case 5 -> "jmp far " + modRM16Operand(modrm);
+            case 6 -> "push " + modRM16Operand(modrm);
+            default -> "db 0xFF";
+        };
+    }
+
+    private String disassemble8087(int esc) {
+        int modrm = getModRM();
+        int mod = (modrm >> 6) & 3;
+        int reg = (modrm >> 3) & 7;
+        int rm = modrm & 7;
+
+        if (mod == 3) {
+            switch (esc) {
+                case 0xD8:
+                    switch (reg) {
+                        case 0: return "fadd st, st(" + rm + ")";
+                        case 1: return "fmul st, st(" + rm + ")";
+                        case 2: return "fcom st(" + rm + ")";
+                        case 3: return "fcomp st(" + rm + ")";
+                        case 4: return "fsub st, st(" + rm + ")";
+                        case 5: return "fsubr st, st(" + rm + ")";
+                        case 6: return "fdiv st, st(" + rm + ")";
+                        case 7: return "fdivr st, st(" + rm + ")";
+                    }
+                    break;
+                case 0xD9:
+                    if (reg == 0) {
+                        switch (rm) {
+                            case 0: return "fld st(" + rm + ")";
+                            case 1: return "fxch st(" + rm + ")";
+                            case 2: return "fnop";
+                        }
+                    } else if (reg == 1) {
+                        switch (rm) {
+                            case 0: return "fchs";
+                            case 1: return "fabs";
+                        }
+                    } else if (reg == 2) return "fst st(" + rm + ")";
+                    else if (reg == 3) return "fstp st(" + rm + ")";
+                    else if (reg == 4) {
+                        switch (rm) {
+                            case 0: return "fldenv";
+                            case 1: return "fldcw";
+                        }
+                    } else if (reg == 5) {
+                        switch (rm) {
+                            case 0: return "fstenv";
+                            case 1: return "fstcw";
+                        }
+                    } else if (reg == 6) {
+                        switch (rm) {
+                            case 0: return "fclex";
+                            case 1: return "fninit";
+                        }
+                    } else if (reg == 7 && rm == 0) return "fstsw ax";
+                    break;
+                case 0xDA:
+                    switch (reg) {
+                        case 0: return "fiadd st, st(" + rm + ")";
+                        case 1: return "fimul st, st(" + rm + ")";
+                        case 2: return "ficom st(" + rm + ")";
+                        case 3: return "ficomp st(" + rm + ")";
+                        case 4: return "fisub st, st(" + rm + ")";
+                        case 5: return "fisubr st, st(" + rm + ")";
+                        case 6: return "fidiv st, st(" + rm + ")";
+                        case 7: return "fidivr st, st(" + rm + ")";
+                    }
+                    break;
+                case 0xDB:
+                    if (reg == 0) return "fild st(" + rm + ")";
+                    if (reg == 1) return "fist st(" + rm + ")";
+                    if (reg == 2) return "fistp st(" + rm + ")";
+                    if (reg == 5) return "fld st(" + rm + ")";
+                    if (reg == 7) return "fstp st(" + rm + ")";
+                    break;
+                case 0xDC:
+                    switch (reg) {
+                        case 0: return "fadd st, st(" + rm + ")";
+                        case 1: return "fmul st, st(" + rm + ")";
+                        case 2: return "fcom st(" + rm + ")";
+                        case 3: return "fcomp st(" + rm + ")";
+                        case 4: return "fsub st, st(" + rm + ")";
+                        case 5: return "fsubr st, st(" + rm + ")";
+                        case 6: return "fdiv st, st(" + rm + ")";
+                        case 7: return "fdivr st, st(" + rm + ")";
+                    }
+                    break;
+                case 0xDD:
+                    if (reg == 0) return "fld st(" + rm + ")";
+                    if (reg == 1) return "fxch st(" + rm + ")";
+                    if (reg == 2) return "fst st(" + rm + ")";
+                    if (reg == 3) return "fstp st(" + rm + ")";
+                    if (reg == 4) return "frstor";
+                    if (reg == 5) return "fsave";
+                    if (reg == 6) return "fstsw";
+                    if (reg == 7) return "ffree st(" + rm + ")";
+                    break;
+                case 0xDE:
+                    switch (reg) {
+                        case 0: return "fiadd st, st(" + rm + ")";
+                        case 1: return "fimul st, st(" + rm + ")";
+                        case 2: return "ficom st(" + rm + ")";
+                        case 3: return "ficomp st(" + rm + ")";
+                        case 4: return "fisub st, st(" + rm + ")";
+                        case 5: return "fisubr st, st(" + rm + ")";
+                        case 6: return "fidiv st, st(" + rm + ")";
+                        case 7: return "fidivr st, st(" + rm + ")";
+                    }
+                    break;
+                case 0xDF:
+                    if (reg == 0) return "fild st(" + rm + ")";
+                    if (reg == 1) return "fist st(" + rm + ")";
+                    if (reg == 2) return "fistp st(" + rm + ")";
+                    if (reg == 3) return "fbld st(" + rm + ")";
+                    if (reg == 4) return "fild st(" + rm + ")";
+                    if (reg == 5) return "fistp st(" + rm + ")";
+                    if (reg == 6) return "fbstp st(" + rm + ")";
+                    if (reg == 7) return "fistp st(" + rm + ")";
+                    break;
+            }
+            return "db " + hexByte(esc);
+        }
+
+        String mem = memoryOperand(mod, rm);
+        switch (esc) {
+            case 0xD8:
+                switch (reg) {
+                    case 0: return "fadd dword ptr " + mem;
+                    case 1: return "fmul dword ptr " + mem;
+                    case 2: return "fcom dword ptr " + mem;
+                    case 3: return "fcomp dword ptr " + mem;
+                    case 4: return "fsub dword ptr " + mem;
+                    case 5: return "fsubr dword ptr " + mem;
+                    case 6: return "fdiv dword ptr " + mem;
+                    case 7: return "fdivr dword ptr " + mem;
+                }
+                break;
+            case 0xD9:
+                switch (reg) {
+                    case 0: return "fld dword ptr " + mem;
+                    case 2: return "fst dword ptr " + mem;
+                    case 3: return "fstp dword ptr " + mem;
+                    case 4: return "fldenv " + mem;
+                    case 5: return "fldcw word ptr " + mem;
+                    case 6: return "fstenv " + mem;
+                    case 7: return "fstcw word ptr " + mem;
+                }
+                break;
+            case 0xDA:
+                switch (reg) {
+                    case 0: return "fiadd dword ptr " + mem;
+                    case 1: return "fimul dword ptr " + mem;
+                    case 2: return "ficom dword ptr " + mem;
+                    case 3: return "ficomp dword ptr " + mem;
+                    case 4: return "fisub dword ptr " + mem;
+                    case 5: return "fisubr dword ptr " + mem;
+                    case 6: return "fidiv dword ptr " + mem;
+                    case 7: return "fidivr dword ptr " + mem;
+                }
+                break;
+            case 0xDB:
+                switch (reg) {
+                    case 0: return "fild dword ptr " + mem;
+                    case 1: return "fist dword ptr " + mem;
+                    case 2: return "fistp dword ptr " + mem;
+                    case 3: return "fld tbyte ptr " + mem;
+                    case 5: return "fld tbyte ptr " + mem;
+                    case 7: return "fstp tbyte ptr " + mem;
+                }
+                break;
+            case 0xDC:
+                switch (reg) {
+                    case 0: return "fadd qword ptr " + mem;
+                    case 1: return "fmul qword ptr " + mem;
+                    case 2: return "fcom qword ptr " + mem;
+                    case 3: return "fcomp qword ptr " + mem;
+                    case 4: return "fsub qword ptr " + mem;
+                    case 5: return "fsubr qword ptr " + mem;
+                    case 6: return "fdiv qword ptr " + mem;
+                    case 7: return "fdivr qword ptr " + mem;
+                }
+                break;
+            case 0xDD:
+                switch (reg) {
+                    case 0: return "fld qword ptr " + mem;
+                    case 1: return "fistp qword ptr " + mem;
+                    case 2: return "fst qword ptr " + mem;
+                    case 3: return "fstp qword ptr " + mem;
+                    case 4: return "frstor " + mem;
+                    case 5: return "fsave " + mem;
+                    case 6: return "fstsw word ptr " + mem;
+                    case 7: return "ffree qword ptr " + mem;
+                }
+                break;
+            case 0xDE:
+                switch (reg) {
+                    case 0: return "fiadd word ptr " + mem;
+                    case 1: return "fimul word ptr " + mem;
+                    case 2: return "ficom word ptr " + mem;
+                    case 3: return "ficomp word ptr " + mem;
+                    case 4: return "fisub word ptr " + mem;
+                    case 5: return "fisubr word ptr " + mem;
+                    case 6: return "fidiv word ptr " + mem;
+                    case 7: return "fidivr word ptr " + mem;
+                }
+                break;
+            case 0xDF:
+                switch (reg) {
+                    case 0: return "fild word ptr " + mem;
+                    case 1: return "fist word ptr " + mem;
+                    case 2: return "fistp word ptr " + mem;
+                    case 3: return "fbld tbyte ptr " + mem;
+                    case 4: return "fild dword ptr " + mem;
+                    case 5: return "fistp dword ptr " + mem;
+                    case 6: return "fbstp tbyte ptr " + mem;
+                    case 7: return "fistp qword ptr " + mem;
+                }
+                break;
+        }
+        return "db " + hexByte(esc);
+    }
 }
