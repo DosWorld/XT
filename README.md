@@ -14,6 +14,7 @@
 [Extending/Developing XT/DW](#extendingdeveloping-xt)<br>
 &nbsp;&nbsp;[Cloning Single Step Tests](#cloning-single-step-tests)<br>
 &nbsp;&nbsp;[Adding DOS or BIOS interrupt handling functions to allow additional MS-DOS programs to run](#adding-dos-or-bios-interrupt-handling-functions-to-allow-additional-ms-dos-programs-to-run)<br>
+&nbsp;&nbsp;[Implemented DOS and BIOS interrupt handling functions](#implemented-dos-and-bios-interrupt-handling-functions)<br>
 
 ### What is XT/DW?
 
@@ -172,3 +173,96 @@ modify `READ/WRITE/EXECUTE` permissions for each byte of memory to isolate progr
 memory protection code in `ProgramLoader.java`.
 5. Add any appropriate unit tests.
 6. Submit a PR, and we'll do our best to review; time and workload permitting.
+
+#### Implemented DOS and BIOS interrupt handling functions
+
+- INT 1A function 00 - Get system time clock ticks
+- INT 20 function 00 - Terminate program
+- INT 21 function 00 - Terminate program
+- INT 21 function 01 - Read character from standard input with echo
+- INT 21 function 02 - Write character to standard output
+- INT 21 function 06 - Direct console input/output
+- INT 21 function 07 - Read character from standard input without echo
+- INT 21 function 08 - Read character from standard input without echo
+- INT 21 function 09 - Write string to standard output
+- INT 21 function 0A - Buffered keyboard input
+- INT 21 function 1A - Set disk transfer area address
+- INT 21 function 25 - Set interrupt vector
+- INT 21 function 2A - Get system date
+- INT 21 function 2C - Get system time
+- INT 21 function 2F - Get disk transfer area address
+- INT 21 function 30 - Get DOS version
+- INT 21 function 3301 - Set extended break checking state
+- INT 21 function 35 - Get interrupt vector
+- INT 21 function 3700 - Get switch character
+- INT 21 function 38 - Get country specific information
+- INT 21 function 39 - Create directory
+- INT 21 function 3A - Remove directory
+- INT 21 function 3B - Set current directory
+- INT 21 function 3C - Create or truncate file
+- INT 21 function 3D - Open existing file
+- INT 21 function 3E - Close file
+- INT 21 function 3F - Read from file or device
+- INT 21 function 40 - Write to file or device
+- INT 21 function 41 - Delete file
+- INT 21 function 42 - Set current file position
+- INT 21 function 4300 - Get file attributes
+- INT 21 function 4400 - IOCTL Get device information
+- INT 21 function 4401 - IOCTL Set device information
+- INT 21 function 4407 - IOCTL Get input/output status
+- INT 21 function 47 - Get current directory
+- INT 21 function 48 - Allocate memory block
+- INT 21 function 49 - Free allocated memory block
+- INT 21 function 4A - Resize memory block
+- INT 21 function 4B00 - EXEC: Load and execute program
+- INT 21 function 4C - Terminate program with exit code
+- INT 21 function 4E - Find first matching file
+- INT 21 function 56 - Rename file
+- INT 21 function 5700 - Get file's date and time
+- INT 21 function 710D - Reset drive (LFN)
+- INT 21 function 7139 - Create directory (LFN)
+- INT 21 function 713A - Remove directory (LFN)
+- INT 21 function 713B - Set current directory (LFN)
+- INT 21 function 7141 - Delete file (LFN)
+- INT 21 function 7143 - Get/Set file attributes (LFN)
+- INT 21 function 7147 - Get current directory (LFN)
+- INT 21 function 714E - Find first file (LFN)
+- INT 21 function 714F - Find next file (LFN)
+- INT 21 function 7156 - Move file (LFN)
+- INT 21 function 7160 - Truename (LFN)
+- INT 21 function 716C - Create/Open file (LFN)
+- INT 2F function 1700 - Clipboard: Installation check
+- INT 2F function 1701 - Clipboard: Get text
+- INT 2F function 1702 - Clipboard: Set text
+- INT 2F function 1703 - Clipboard: Clear
+- INT 2F function 4300 - XMS: Installation check
+- INT 2F function 4310 - XMS: Query free extended memory
+- INT 2F function 4311 - XMS: Allocate extended memory block
+- INT 2F function 4312 - XMS: Free extended memory block
+- INT 2F function 4313 - XMS: Move extended memory block
+- INT 2F function 4314 - XMS: Lock extended memory block
+- INT 2F function 4315 - XMS: Unlock extended memory block
+- INT 2F function 4316 - XMS: Get handle information
+- INT 2F function 4317 - XMS: Reallocate extended memory block
+- INT 2F function 4318 - XMS: Enable A20 line
+- INT 2F function 4319 - XMS: Disable A20 line
+- INT 2F function 431A - XMS: Query A20 line status
+- INT 2F function 431B - XMS: Register UMB handler
+- INT 2F function 431C - XMS: Get UMB size
+- INT 2F function 431D - XMS: Allocate UMB
+- INT 2F function 431E - XMS: Free UMB
+- INT 67 function 00 - EMS: Installation check
+- INT 67 function 01 - EMS: Get EMS status
+- INT 67 function 02 - EMS: Get page frame segment
+- INT 67 function 03 - EMS: Get unallocated page count
+- INT 67 function 04 - EMS: Allocate pages
+- INT 67 function 05 - EMS: Map page
+- INT 67 function 06 - EMS: Free pages
+- INT 67 function 07 - EMS: Get version
+- INT 67 function 08 - EMS: Save page map
+- INT 67 function 09 - EMS: Restore page map
+- INT 67 function 0A - EMS: Get handle pages
+- INT 67 function 0B - EMS: Get handle count
+- INT 67 function 0C - EMS: Get handle pages (alternative)
+- INT 67 function 0D - EMS: Get handle count (alternative)
+- INT 67 function 0E - EMS: Get page frame address
