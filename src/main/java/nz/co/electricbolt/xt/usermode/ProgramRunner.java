@@ -2,6 +2,7 @@ package nz.co.electricbolt.xt.usermode;
 
 import nz.co.electricbolt.xt.Breakpoint;
 import nz.co.electricbolt.xt.Watchpoint;
+import nz.co.electricbolt.xt.DumpRegion;
 import nz.co.electricbolt.xt.cpu.CPU;
 import nz.co.electricbolt.xt.cpu.CPUDelegate;
 import nz.co.electricbolt.xt.cpu.SegOfs;
@@ -24,19 +25,21 @@ public class ProgramRunner implements CPUDelegate {
 
     private final List<Breakpoint> breakpoints;
     private final List<Watchpoint> watchpoints;
+    private final List<DumpRegion> dumpRegions;
     private final Long maxInstructions;
     private final boolean traceMode;
 
     public ProgramRunner(final String programPath, final String commandLine, final String hostWorkingDirectory,
                          final boolean traceCPU, final boolean traceInterrupt, final String traceFile,
                          final List<Breakpoint> breakpoints, final List<Watchpoint> watchpoints, final Long maxInstructions,
-                         final boolean traceMode) {
+                         final boolean traceMode, List<DumpRegion> dumpRegions) {
         directoryTranslation = new DirectoryTranslation(hostWorkingDirectory);
         this.programPath = directoryTranslation.emulatedPathToHostPath(programPath);
         this.commandLine = commandLine;
         this.breakpoints = breakpoints;
         this.watchpoints = watchpoints;
         this.maxInstructions = maxInstructions;
+        this.dumpRegions = dumpRegions;
         this.traceMode = traceMode;
 
         this.cpu = new CPU(this);
@@ -106,6 +109,7 @@ public class ProgramRunner implements CPUDelegate {
             cpu.setMaxInstructions(maxInstructions);
         }
         cpu.execute();
+        printDumps();
     }
 
     @Override
@@ -169,5 +173,19 @@ public class ProgramRunner implements CPUDelegate {
         System.err.println(message);
         System.err.println(cpu.getReg().toString());
         System.exit(255);
+    }
+
+    private void printDumps() {
+        if (dumpRegions == null) return;
+        if (dumpRegions.isEmpty()) return;
+        System.out.println("\n=== Memory dumps ===");
+        for (DumpRegion dr : dumpRegions) {
+            int seg = dr.getSegment() & 0xFFFF;
+            int off = dr.getOffset() & 0xFFFF;
+            int len = dr.getLength();
+            System.out.printf("%04X:%04X (%d bytes):\n", seg, off, len);
+            String dump = cpu.getMemory().hexDump((short) seg, (short) off, len);
+            System.out.println(dump);
+        }
     }
 }

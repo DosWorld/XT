@@ -19,14 +19,15 @@ public class Main {
     private final List<Breakpoint> breakpoints = new ArrayList<>();
     private boolean traceMode = false;
     private final List<Watchpoint> watchpoints = new ArrayList<>();
+    private final List<DumpRegion> dumpRegions = new ArrayList<>();
 
     private Main(final CommandLineParser commandLine) {
         this.commandLine = commandLine;
     }
 
     private void printAppVersion() {
-        System.out.println("XT/DW version 1.0.2; Copyright © 2026; DosWorld.");
-        System.out.println("Copyright © 2025; Electric Bolt Limited.");
+        System.out.println("XT/DW version 1.0.2; Copyright (c) 2026; DosWorld.");
+        System.out.println("Copyright (c) 2025; Electric Bolt Limited.");
     }
 
     private void haltSyntax(final String message) {
@@ -63,7 +64,7 @@ public class Main {
 
     private void haltSyntaxTrace(final String message) {
         printAppVersion();
-        System.out.println("Syntax:        xt trace [--max=N] [--bp=SEG:OFS[:COND]]... [--wp=SEG:OFS:type]... program [program-args]");
+        System.out.println("Syntax:        xt trace [--max=N] [--bp=SEG:OFS[:COND]]... [--wp=SEG:OFS:type]... [--dump=SEG:OFS:LEN]... program [program-args]");
         System.out.println("               Trace execution of a .EXE or .COM command line MS-DOS app.");
         System.out.println("               For each instruction, displays CS:IP, disassembly, and all register values.");
         System.out.println("--max=N      = Maximum number of instructions to trace before stopping");
@@ -76,6 +77,8 @@ public class Main {
         System.out.println("--wp=SEG:OFS:type = Set a watchpoint at the specified segment:offset (hex)");
         System.out.println("               type can be: r (read), w (write), a (access)");
         System.out.println("               Can be specified multiple times. Example: --wp=1000:2000:w");
+        System.out.println("--dump=SEG:OFS:LEN = Dump memory region at program stop (hex). Can be multiple.");
+        System.out.println("               Example: --dump=1000:2000:32");
         System.out.println("program      = The .EXE or .COM command line MS-DOS app you want to trace.");
         System.out.println("program-args = Optional arguments for the MS-DOS app.");
         System.out.println();
@@ -107,7 +110,7 @@ public class Main {
             hostWorkingDir += File.separator;
         }
         final ProgramRunner runner = new ProgramRunner(emulatedProgramPath, emulatedProgramArgs, hostWorkingDir,
-                traceCPU, traceInterrupt, traceFile, breakpoints, watchpoints, maxInstructions, traceMode);
+                traceCPU, traceInterrupt, traceFile, breakpoints, watchpoints, maxInstructions, traceMode, dumpRegions);
         printSettings();
         runner.loadAndExecute();
     }
@@ -123,6 +126,12 @@ public class Main {
             System.out.println("Watchpoints set:");
             for (Watchpoint wp : watchpoints) {
                 System.out.println("  " + wp);
+            }
+        }
+        if (!dumpRegions.isEmpty()) {
+            System.out.println("Dump regions:");
+            for (DumpRegion dr : dumpRegions) {
+                System.out.println("  " + dr);
             }
         }
         if (maxInstructions != null) {
@@ -383,12 +392,72 @@ public class Main {
                         haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET in hex");
                     }
                 }
+            } else if (parts.length == 3) {
+                try {
+                    int segment = Integer.parseInt(parts[0], 16);
+                    int offset = Integer.parseInt(parts[1], 16);
+                    String condStr = parts[2];
+                    if (segment < 0 || segment > 0xFFFF) {
+                        if (traceMode) {
+                            haltSyntaxTrace("Segment must be between 0 and 0xFFFF");
+                        } else {
+                            haltSyntaxRun("Segment must be between 0 and 0xFFFF");
+                        }
+                    }
+                    if (offset < 0 || offset > 0xFFFF) {
+                        if (traceMode) {
+                            haltSyntaxTrace("Offset must be between 0 and 0xFFFF");
+                        } else {
+                            haltSyntaxRun("Offset must be between 0 and 0xFFFF");
+                        }
+                    }
+                    breakpoints.add(new Breakpoint((short) segment, (short) offset, condStr));
+                    return true;
+                } catch (NumberFormatException e) {
+                    if (traceMode) {
+                        haltSyntaxTrace("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET:COND");
+                    } else {
+                        haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET:COND");
+                    }
+                }
             } else {
                 if (traceMode) {
-                    haltSyntaxTrace("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET");
+                    haltSyntaxTrace("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET or SEG:OFFSET:COND");
                 } else {
-                    haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET");
+                    haltSyntaxRun("Invalid breakpoint format: " + bpStr + ". Expected format: SEG:OFFSET or SEG:OFFSET:COND");
                 }
+            }
+        }
+        return false;
+    }
+
+    private boolean parseDumpOption() {
+        String argument = commandLine.peek();
+        if (argument != null && argument.startsWith("--dump=")) {
+            commandLine.next();
+            String dumpStr = argument.substring(7);
+            String[] parts = dumpStr.split(":");
+            if (parts.length == 3) {
+                try {
+                    int segment = Integer.parseInt(parts[0], 16);
+                    int offset = Integer.parseInt(parts[1], 16);
+                    int length = Integer.parseInt(parts[2], 16);
+                    if (segment < 0 || segment > 0xFFFF) {
+                        haltSyntaxTrace("Segment must be between 0 and 0xFFFF");
+                    }
+                    if (offset < 0 || offset > 0xFFFF) {
+                        haltSyntaxTrace("Offset must be between 0 and 0xFFFF");
+                    }
+                    if (length < 0 || length > 0xFFFF) {
+                        haltSyntaxTrace("Length must be between 0 and 0xFFFF");
+                    }
+                    dumpRegions.add(new DumpRegion((short) segment, (short) offset, length));
+                    return true;
+                } catch (NumberFormatException e) {
+                    haltSyntaxTrace("Invalid dump format: " + dumpStr + ". Expected format: SEG:OFS:LEN in hex");
+                }
+            } else {
+                haltSyntaxTrace("Invalid dump format: " + dumpStr + ". Expected format: SEG:OFS:LEN");
             }
         }
         return false;
@@ -406,6 +475,8 @@ public class Main {
                 parseBreakpointOption();
             } else if (argument.startsWith("--wp=")) {
                 parseWatchpointOption();
+            } else if (argument.startsWith("--dump=")) {
+                parseDumpOption();
             } else {
                 if (traceMode) {
                     haltSyntaxTrace(argument + " option not recognized");

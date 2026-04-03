@@ -270,4 +270,42 @@ public class Memory {
         segOfs.increment();
         writeByte(segOfs, (byte) (value >> 8));
     }
+
+    public String hexDump(short segment, short offset, int length) {
+        if (length <= 0) {
+            return "";
+        }
+        int linearStart = ((segment & 0xFFFF) * 16 + (offset & 0xFFFF)) & 0xFFFFF;
+        StringBuilder sb = new StringBuilder();
+        int remaining = length;
+        int pos = 0;
+        while (remaining > 0) {
+            int linear = (linearStart + pos) & 0xFFFFF;
+            int seg = (linear >> 4) & 0xFFFF;
+            int ofs = linear & 0xF;
+            sb.append(String.format("%04X:%04X  ", seg, ofs));
+            int bytesInLine = Math.min(remaining, 16);
+            for (int i = 0; i < 16; i++) {
+                if (i < bytesInLine) {
+                    int addr = (linearStart + pos + i) & 0xFFFFF;
+                    byte b = buf[addr];
+                    sb.append(String.format("%02X ", b & 0xFF));
+                } else {
+                    sb.append("   ");
+                }
+                if (i == 7) sb.append(" ");
+            }
+            sb.append(" ");
+            for (int i = 0; i < bytesInLine; i++) {
+                int addr = (linearStart + pos + i) & 0xFFFFF;
+                byte b = buf[addr];
+                char c = (b >= 32 && b <= 126) ? (char) b : '.';
+                sb.append(c);
+            }
+            sb.append("\n");
+            pos += bytesInLine;
+            remaining -= bytesInLine;
+        }
+        return sb.toString();
+    }
 }
