@@ -124,7 +124,7 @@ public class CPU {
             reg.flags.isOverflow() ? 'O' : '-'
         );
         String disasm = disassembler.disassemble();
-        System.out.printf("%04X:%04X [%s] %-16s AX=%04X BX=%04X CX=%04X DX=%04X SP=%04X BP=%04X SI=%04X DI=%04X DS=%04X ES=%04X SS=%04X FLAGS=%s%n",
+        System.out.printf("%04X:%04X [%s] [%-16s] AX=%04X BX=%04X CX=%04X DX=%04X SI=%04X DI=%04X BP=%04X DS=%04X ES=%04X SS=%04X SP=%04X FLAGS=%s%n",
             cs & 0xFFFF,
             ip & 0xFFFF,
             bytes.toString(),
@@ -133,13 +133,13 @@ public class CPU {
             reg.BX.getValue() & 0xFFFF,
             reg.CX.getValue() & 0xFFFF,
             reg.DX.getValue() & 0xFFFF,
-            reg.SP.getValue() & 0xFFFF,
-            reg.BP.getValue() & 0xFFFF,
             reg.SI.getValue() & 0xFFFF,
             reg.DI.getValue() & 0xFFFF,
+            reg.BP.getValue() & 0xFFFF,
             reg.DS.getValue() & 0xFFFF,
             reg.ES.getValue() & 0xFFFF,
             reg.SS.getValue() & 0xFFFF,
+            reg.SP.getValue() & 0xFFFF,
             flagsStr
         );
     }
@@ -806,6 +806,10 @@ public class CPU {
                 loadSeg(reg.DS);
                 break;
             case (byte) 0x9B:
+                if (fpu.hasException()) {
+                    interrupt((byte) 2);
+                    return;
+                }
                 break;
             case (byte) 0xF0:
                 break;

@@ -1,4 +1,3 @@
-// ProgramLoader.java (исправленный)
 package nz.co.electricbolt.xt.usermode;
 
 import nz.co.electricbolt.xt.cpu.CPU;
