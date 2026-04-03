@@ -63,9 +63,6 @@ public class CPU {
                 dumpRegistersAndStop("Maximum instructions limit reached: " + maxInstructions);
                 return;
             }
-            if (traceMode) {
-                printTraceLine();
-            }
             repeat = false;
             repeatFlag = null;
             segmentOverride = null;
@@ -75,7 +72,9 @@ public class CPU {
                     String.format("%04X:%04X", reg.CS.getValue(), reg.IP.getValue()));
                 return;
             }
-
+            if (traceMode) {
+                printTraceLine();
+            }
             step();
         }
     }
@@ -86,9 +85,6 @@ public class CPU {
                 dumpRegistersAndStop("Maximum instructions limit reached: " + maxInstructions);
                 return;
             }
-            if (traceMode) {
-                printTraceLine();
-            }
             repeat = false;
             repeatFlag = null;
             segmentOverride = null;
@@ -97,7 +93,9 @@ public class CPU {
                     String.format("%04X:%04X", reg.CS.getValue(), reg.IP.getValue()));
                 return;
             }
-
+            if (traceMode) {
+                printTraceLine();
+            }
             step();
         }
     }
@@ -1057,20 +1055,35 @@ public class CPU {
         System.out.println("Reason: " + reason);
         System.out.println("Instructions executed: " + instructionCount);
         System.out.println("\nRegister dump:");
-        System.out.println(reg.toString());
-        System.out.println("\nCS:IP = " + String.format("%04X:%04X", cs & 0xFFFF, ip & 0xFFFF));
-        System.out.println("SS:SP = " + String.format("%04X:%04X", ss & 0xFFFF, sp & 0xFFFF));
-        System.out.println("SS:BP = " + String.format("%04X:%04X", ss & 0xFFFF, bp & 0xFFFF));
-        System.out.println("DS = " + String.format("%04X", ds & 0xFFFF));
-        System.out.println("ES = " + String.format("%04X", es & 0xFFFF));
 
-        System.out.println("\nCurrent instruction bytes:");
-        SegOfs currentAddr = new SegOfs(reg.CS, reg.IP);
-        for (int i = 0; i < 16; i++) {
-            byte b = memory.fetchByte(currentAddr);
-            System.out.printf("%02X ", b & 0xFF);
-            currentAddr.increment();
-        }
+        String flagsStr = String.format("%c%c%c%c%c%c%c%c%c",
+            reg.flags.isCarry() ? 'C' : '-',
+            reg.flags.isParityEven() ? 'P' : '-',
+            reg.flags.isAuxiliaryCarry() ? 'A' : '-',
+            reg.flags.isZero() ? 'Z' : '-',
+            reg.flags.isSignNegative() ? 'S' : '-',
+            reg.flags.isTrapEnabled() ? 'T' : '-',
+            reg.flags.isInterruptEnabled() ? 'I' : '-',
+            reg.flags.isDirectionDown() ? 'D' : '-',
+            reg.flags.isOverflow() ? 'O' : '-'
+        );
+        System.out.printf("CS:%04X,IP:%04X | AX=%04X,BX=%04X,CX=%04X,DX=%04X,SI=%04X,DI=%04X,BP=%04X,DS=%04X,ES=%04X | SS:SP=%04X:%04X | FLAGS=%s%n",
+            cs & 0xFFFF,
+            ip & 0xFFFF,
+            reg.AX.getValue() & 0xFFFF,
+            reg.BX.getValue() & 0xFFFF,
+            reg.CX.getValue() & 0xFFFF,
+            reg.DX.getValue() & 0xFFFF,
+            reg.SI.getValue() & 0xFFFF,
+            reg.DI.getValue() & 0xFFFF,
+            reg.BP.getValue() & 0xFFFF,
+            reg.DS.getValue() & 0xFFFF,
+            reg.ES.getValue() & 0xFFFF,
+            reg.SS.getValue() & 0xFFFF,
+            reg.SP.getValue() & 0xFFFF,
+            flagsStr
+        );
+
         System.out.println();
         System.out.println("\nStack dump (SS:SP, 32 words):");
         dumpStackWords(ss, sp, 32);
