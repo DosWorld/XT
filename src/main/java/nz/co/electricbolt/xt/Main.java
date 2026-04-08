@@ -45,8 +45,9 @@ public class Main {
 
     private void haltSyntaxRun(final String message) {
         printAppVersion();
-        System.out.println("Syntax:        xt run [-c dir] program [program-args]");
+        System.out.println("Syntax:        xt run [--max=N] [-c dir] program [program-args]");
         System.out.println("               Run a .EXE or .COM command line MS-DOS app on your host system.");
+        System.out.println("--max=N      = Maximum number of instructions to execute before stopping");
         System.out.println("-c dir       = The host directory that will be the root of the emulated C: drive");
         System.out.println("               If not specified then the current working directory will be used.");
         System.out.println("program      = The .EXE or .COM command line MS-DOS app you want to run. You can");
@@ -194,7 +195,23 @@ public class Main {
         }
     }
 
+    private void parseRunOptions() {
+        while (commandLine.hasNext()) {
+            String argument = commandLine.peek();
+            if (argument == null || !argument.startsWith("--")) {
+                break;
+            }
+            if (argument.startsWith("--max=")) {
+                parseMaxOption();
+            } else {
+                haltSyntaxRun(argument + " option not recognized in run mode");
+            }
+        }
+    }
+
     private void parseRun() {
+        parseRunOptions();
+
         if (!commandLine.hasNext()) {
             haltSyntaxRun("expecting program argument");
         }

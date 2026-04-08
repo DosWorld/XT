@@ -153,6 +153,62 @@ public class FPU8087 {
         cpu.getMemory().writeWord(new SegOfs(addr.getSegment(), (short) (addr.getOffset() + 6)), (short) ((bits >> 48) & 0xFFFF));
     }
 
+    // 80-bit extended precision (10 bytes): bits 79=sign, 78-64=exponent (bias 16383), 63-0=mantissa (explicit integer bit)
+    private double readReal80(SegOfs addr) {
+        long mLow  = cpu.getMemory().readWord(addr) & 0xFFFFL;
+        long mMid1 = (cpu.getMemory().readWord(new SegOfs(addr.getSegment(), (short)(addr.getOffset() + 2))) & 0xFFFFL) << 16;
+        long mMid2 = (cpu.getMemory().readWord(new SegOfs(addr.getSegment(), (short)(addr.getOffset() + 4))) & 0xFFFFL) << 32;
+        long mHigh = (cpu.getMemory().readWord(new SegOfs(addr.getSegment(), (short)(addr.getOffset() + 6))) & 0xFFFFL) << 48;
+        long mantissa = mHigh | mMid2 | mMid1 | mLow;
+        int expSign = cpu.getMemory().readWord(new SegOfs(addr.getSegment(), (short)(addr.getOffset() + 8))) & 0xFFFF;
+        int sign = (expSign >> 15) & 1;
+        int exp = expSign & 0x7FFF;
+
+        if (exp == 0 && mantissa == 0) return sign == 0 ? 0.0 : -0.0;
+        if (exp == 0x7FFF) return (mantissa << 1) == 0 ? (sign == 0 ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY) : Double.NaN;
+
+        // Convert from 80-bit bias (16383) to 64-bit bias (1023), drop explicit integer bit
+        int exp64 = exp - 16383 + 1023;
+        long frac = mantissa & 0x7FFFFFFFFFFFFFFFL; // drop explicit integer bit
+        long bits64;
+        if (exp64 <= 0) {
+            // Underflow: denormalized or zero
+            bits64 = ((long) sign << 63);
+        } else if (exp64 >= 0x7FF) {
+            // Overflow: infinity
+            bits64 = ((long) sign << 63) | (0x7FFL << 52);
+        } else {
+            bits64 = ((long) sign << 63) | ((long) exp64 << 52) | (frac >>> 11);
+        }
+        return Double.longBitsToDouble(bits64);
+    }
+
+    private void writeReal80(SegOfs addr, double value) {
+        long bits64 = Double.doubleToRawLongBits(value);
+        int sign = (int)(bits64 >>> 63);
+        int exp64 = (int)((bits64 >>> 52) & 0x7FF);
+        long frac52 = bits64 & 0x000FFFFFFFFFFFFFL;
+
+        int exp80;
+        long mantissa;
+        if (exp64 == 0x7FF) {
+            exp80 = 0x7FFF;
+            mantissa = (frac52 == 0) ? 0x8000000000000000L : 0xC000000000000000L;
+        } else if (exp64 == 0) {
+            exp80 = 0;
+            mantissa = frac52 << 11;
+        } else {
+            exp80 = exp64 - 1023 + 16383;
+            mantissa = 0x8000000000000000L | (frac52 << 11);
+        }
+
+        cpu.getMemory().writeWord(addr, (short)(mantissa & 0xFFFF));
+        cpu.getMemory().writeWord(new SegOfs(addr.getSegment(), (short)(addr.getOffset() + 2)), (short)((mantissa >> 16) & 0xFFFF));
+        cpu.getMemory().writeWord(new SegOfs(addr.getSegment(), (short)(addr.getOffset() + 4)), (short)((mantissa >> 32) & 0xFFFF));
+        cpu.getMemory().writeWord(new SegOfs(addr.getSegment(), (short)(addr.getOffset() + 6)), (short)((mantissa >> 48) & 0xFFFF));
+        cpu.getMemory().writeWord(new SegOfs(addr.getSegment(), (short)(addr.getOffset() + 8)), (short)((sign << 15) | exp80));
+    }
+
     private void storeEnv(SegOfs addr) {
         cpu.getMemory().writeWord(addr, control);
         cpu.getMemory().writeWord(new SegOfs(addr.getSegment(), (short) (addr.getOffset() + 2)), status);
@@ -335,8 +391,10 @@ public class FPU8087 {
     private void db_mem(int reg, SegOfs addr) {
         switch (reg) {
             case 0: push((double) readInteger32(addr)); break;
-            case 2: writeInteger32(addr, (int) Math.rint(getST(0))); break;
-            case 3: writeInteger32(addr, (int) Math.rint(getST(0))); pop(); break;
+            case 2: writeInteger32(addr, (int) roundWithControlWord(getST(0))); break;
+            case 3: writeInteger32(addr, (int) roundWithControlWord(getST(0))); pop(); break;
+            case 5: push(readReal80(addr)); break;
+            case 7: writeReal80(addr, getST(0)); pop(); break;
         }
     }
 
@@ -436,10 +494,26 @@ public class FPU8087 {
     private void df_mem(int reg, SegOfs addr) {
         switch (reg) {
             case 0: push((double) readInteger16(addr)); break;
-            case 2: writeInteger16(addr, (short) Math.rint(getST(0))); break;
-            case 3: writeInteger16(addr, (short) Math.rint(getST(0))); pop(); break;
+            case 2: writeInteger16(addr, (short) roundWithControlWord(getST(0))); break;
+            case 3: writeInteger16(addr, (short) roundWithControlWord(getST(0))); pop(); break;
+            case 4: push((double) readInteger64(addr)); break;
             case 5: push((double) readInteger64(addr)); break;
-            case 7: writeInteger64(addr, (long) Math.rint(getST(0))); pop(); break;
+            case 6: {
+                // FBSTP: store ST(0) as 18-digit packed BCD (10 bytes), then pop
+                // Format: bytes 0-8 = 9 pairs of BCD digits (low digit in low nibble),
+                //         byte 9 = sign (0x80 if negative, 0x00 if positive)
+                double val = getST(0);
+                pop();
+                long intVal = Math.abs(Math.round(val));
+                for (int i = 0; i < 9; i++) {
+                    int lo = (int)(intVal % 10); intVal /= 10;
+                    int hi = (int)(intVal % 10); intVal /= 10;
+                    cpu.getMemory().writeByte(new SegOfs(addr.getSegment(), (short)(addr.getOffset() + i)), (byte)((hi << 4) | lo));
+                }
+                cpu.getMemory().writeByte(new SegOfs(addr.getSegment(), (short)(addr.getOffset() + 9)), val < 0.0 ? (byte)0x80 : (byte)0x00);
+                break;
+            }
+            case 7: writeInteger64(addr, (long) roundWithControlWord(getST(0))); pop(); break;
         }
     }
 
@@ -484,6 +558,17 @@ public class FPU8087 {
         }
     }
 
+    private double roundWithControlWord(double val) {
+        int rc = (control >> 10) & 3;
+        switch (rc) {
+            case 0: return Math.rint(val);           // round to nearest (even)
+            case 1: return Math.floor(val);           // round toward -infinity
+            case 2: return Math.ceil(val);            // round toward +infinity
+            case 3: return val < 0 ? Math.ceil(val) : Math.floor(val); // truncate toward zero
+            default: return Math.rint(val);
+        }
+    }
+
     private void d9_reg(int reg, int rm) {
         switch (reg) {
             case 0: push(getST(rm)); break;
@@ -494,8 +579,31 @@ public class FPU8087 {
                 break;
             case 4:
                 switch (rm) {
-                    case 0: setST(0, -getST(0)); break;
-                    case 1: setST(0, Math.abs(getST(0))); break;
+                    case 0: setST(0, -getST(0)); break; // FCHS
+                    case 1: setST(0, Math.abs(getST(0))); break; // FABS
+                    case 4: compare(getST(0), 0.0); break; // FTST
+                    case 5: { // FXAM: examine ST(0), set C0/C2/C3/C1
+                        status &= ~0x4700; // clear C0/C1/C2/C3
+                        int idx = sti(0);
+                        if (tag[idx] == 3) { // empty: C3=1, C2=0, C0=1
+                            status |= 0x4100;
+                        } else {
+                            double val = st[idx];
+                            long bits = Double.doubleToRawLongBits(val);
+                            int sign = (int)(bits >>> 63);
+                            if (sign != 0) status |= 0x0200; // C1 = sign
+                            if (Double.isNaN(val)) {
+                                status |= 0x0100; // C0=1 (NaN: C3=0, C2=0, C0=1)
+                            } else if (Double.isInfinite(val)) {
+                                status |= 0x0500; // C2=1, C0=1 (Infinity: C3=0, C2=1, C0=1)
+                            } else if (val == 0.0) {
+                                status |= 0x4000; // C3=1 (Zero: C3=1, C2=0, C0=0)
+                            } else {
+                                status |= 0x0400; // C2=1 (Normal: C3=0, C2=1, C0=0)
+                            }
+                        }
+                        break;
+                    }
                 }
                 break;
             case 5:
@@ -509,11 +617,79 @@ public class FPU8087 {
                     case 6: push(0.0); break;
                 }
                 break;
+            case 6:
+                switch (rm) {
+                    case 0: {                        // F2XM1: ST(0) = 2^ST(0) - 1  (|ST(0)| <= 1)
+                        setST(0, Math.pow(2.0, getST(0)) - 1.0);
+                        break;
+                    }
+                    case 1: {                        // FYL2X: ST(1) = ST(1) * log2(ST(0)), pop
+                        double x = getST(0), y = getST(1);
+                        setST(1, y * (Math.log(x) / Math.log(2.0)));
+                        pop();
+                        break;
+                    }
+                    case 2: {                        // FPTAN: ST(0) = tan(ST(0)), push 1.0
+                        double val = getST(0);
+                        setST(0, Math.tan(val));
+                        push(1.0);
+                        status &= ~0x0400; // C2=0 (result complete)
+                        break;
+                    }
+                    case 3: {                        // FPATAN: ST(1) = atan2(ST(1), ST(0)), pop
+                        double y = getST(1), x = getST(0);
+                        setST(1, Math.atan2(y, x));
+                        pop();
+                        break;
+                    }
+                    case 4: {                        // FXTRACT
+                        double val = getST(0);
+                        if (val == 0.0) {
+                            push(Double.NEGATIVE_INFINITY);
+                        } else {
+                            long bits = Double.doubleToRawLongBits(val);
+                            int exp = (int)((bits >>> 52) & 0x7FF) - 1023;
+                            double sig = Double.longBitsToDouble((bits & 0x800FFFFFFFFFFFFFL) | 0x3FF0000000000000L);
+                            setST(0, (double) exp);
+                            push(sig);
+                        }
+                        break;
+                    }
+                    case 6: // FDECSTP
+                        status &= ~0x4500;
+                        top = (top - 1) & 7; updateStatus(); break;
+                    case 7: // FINCSTP
+                        status &= ~0x4500;
+                        top = (top + 1) & 7; updateStatus(); break;
+                }
+                break;
             case 7:
                 switch (rm) {
-                    case 4: setST(0, Math.rint(getST(0))); break;
-                    case 6: top = (top + 1) & 7; updateStatus(); break;
-                    case 7: top = (top - 1) & 7; updateStatus(); break;
+                    case 0: { // FPREM (partial remainder, truncate toward zero)
+                        double st0 = getST(0), st1 = getST(1);
+                        if (st1 == 0) { status |= 0x0400; break; }
+                        double q = st0 < 0 ? Math.ceil(st0 / st1) : Math.floor(st0 / st1);
+                        setST(0, st0 - q * st1);
+                        status &= ~0x4500;
+                        long qi = (long) q;
+                        if ((qi & 4) != 0) status |= 0x0100; // C0
+                        if ((qi & 2) != 0) status |= 0x4000; // C3
+                        if ((qi & 1) != 0) status |= 0x0200; // C1
+                        break;
+                    }
+                    case 1: { // FYL2XP1: ST(1) = ST(1) * log2(ST(0)+1), pop
+                        double x = getST(0), y = getST(1);
+                        setST(1, y * (Math.log1p(x) / Math.log(2.0)));
+                        pop();
+                        break;
+                    }
+                    case 2: setST(0, Math.sqrt(getST(0))); break; // FSQRT
+                    case 4: setST(0, roundWithControlWord(getST(0))); break; // FRNDINT
+                    case 5: { // FSCALE: ST(0) = ST(0) * 2^trunc(ST(1))
+                        double scale = getST(1);
+                        setST(0, getST(0) * Math.pow(2.0, (double)(long)scale));
+                        break;
+                    }
                 }
                 break;
         }
@@ -524,31 +700,21 @@ public class FPU8087 {
     }
 
     private void db_reg(int reg, int rm) {
-        if (reg == 4 && rm == 3) reset();
+        if (reg == 4) {
+            switch (rm) {
+                case 2: status &= ~0x80FF; break; // FNCLEX: clear exception flags and busy
+                case 3: reset(); break;            // FNINIT
+            }
+        }
     }
 
     private void dc_reg(int reg, int rm) {
         switch (reg) {
-            case 0: setST(rm, getST(rm) + getST(0)); break;
-            case 1: setST(rm, getST(rm) * getST(0)); break;
-            case 4: setST(rm, getST(rm) - getST(0)); break;
-            case 5: setST(rm, getST(0) - getST(rm)); break;
-            case 6:
-                if (getST(0) == 0.0) {
-                    status |= 0x04;
-                    if (getST(rm) == 0.0) {
-                        status |= 0x01;
-                        setST(rm, Double.NaN);
-                    } else {
-                        double result = getST(rm) > 0 ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
-                        setST(rm, result);
-                        if (getST(rm) > 0) status |= 0x0200;
-                    }
-                } else {
-                    setST(rm, getST(rm) / getST(0));
-                }
-                break;
-            case 7:
+            case 0: setST(rm, getST(rm) + getST(0)); break; // FADD ST(rm), ST(0)
+            case 1: setST(rm, getST(rm) * getST(0)); break; // FMUL ST(rm), ST(0)
+            case 4: setST(rm, getST(0) - getST(rm)); break; // FSUBR ST(rm), ST(0): ST(rm) = ST(0) - ST(rm)
+            case 5: setST(rm, getST(rm) - getST(0)); break; // FSUB ST(rm), ST(0): ST(rm) = ST(rm) - ST(0)
+            case 6: // FDIVR ST(rm), ST(0): ST(rm) = ST(0) / ST(rm)
                 if (getST(rm) == 0.0) {
                     status |= 0x04;
                     if (getST(0) == 0.0) {
@@ -561,6 +727,21 @@ public class FPU8087 {
                     }
                 } else {
                     setST(rm, getST(0) / getST(rm));
+                }
+                break;
+            case 7: // FDIV ST(rm), ST(0): ST(rm) = ST(rm) / ST(0)
+                if (getST(0) == 0.0) {
+                    status |= 0x04;
+                    if (getST(rm) == 0.0) {
+                        status |= 0x01;
+                        setST(rm, Double.NaN);
+                    } else {
+                        double result = getST(rm) > 0 ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
+                        setST(rm, result);
+                        if (getST(rm) > 0) status |= 0x0200;
+                    }
+                } else {
+                    setST(rm, getST(rm) / getST(0));
                 }
                 break;
         }
@@ -578,47 +759,30 @@ public class FPU8087 {
 
     private void de_reg(int reg, int rm) {
         switch (reg) {
-            case 0:
+            case 0: // FADDP ST(rm), ST(0)
                 setST(rm, getST(rm) + getST(0));
                 pop();
                 break;
-            case 1:
+            case 1: // FMULP ST(rm), ST(0)
                 setST(rm, getST(rm) * getST(0));
                 pop();
                 break;
-            case 3:
+            case 3: // FCOMPP (only rm=1)
                 if (rm == 1) {
                     compare(getST(0), getST(1));
                     pop();
                     pop();
-                    status = (short) 0x0304;
                 }
                 break;
-            case 4:
-                setST(rm, getST(rm) - getST(0));
-                pop();
-                break;
-            case 5:
+            case 4: // FSUBRP ST(rm), ST(0): ST(rm) = ST(0) - ST(rm)
                 setST(rm, getST(0) - getST(rm));
                 pop();
                 break;
-            case 6:
-                if (getST(0) == 0.0) {
-                    status |= 0x04;
-                    if (getST(rm) == 0.0) {
-                        status |= 0x01;
-                        setST(rm, Double.NaN);
-                    } else {
-                        double result = getST(rm) > 0 ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
-                        setST(rm, result);
-                        if (getST(rm) > 0) status |= 0x0200;
-                    }
-                } else {
-                    setST(rm, getST(rm) / getST(0));
-                }
+            case 5: // FSUBP ST(rm), ST(0): ST(rm) = ST(rm) - ST(0)
+                setST(rm, getST(rm) - getST(0));
                 pop();
                 break;
-            case 7:
+            case 6: // FDIVRP ST(rm), ST(0): ST(rm) = ST(0) / ST(rm)
                 if (getST(rm) == 0.0) {
                     status |= 0x04;
                     if (getST(0) == 0.0) {
@@ -631,6 +795,22 @@ public class FPU8087 {
                     }
                 } else {
                     setST(rm, getST(0) / getST(rm));
+                }
+                pop();
+                break;
+            case 7: // FDIVP ST(rm), ST(0): ST(rm) = ST(rm) / ST(0)
+                if (getST(0) == 0.0) {
+                    status |= 0x04;
+                    if (getST(rm) == 0.0) {
+                        status |= 0x01;
+                        setST(rm, Double.NaN);
+                    } else {
+                        double result = getST(rm) > 0 ? Double.POSITIVE_INFINITY : Double.NEGATIVE_INFINITY;
+                        setST(rm, result);
+                        if (getST(rm) > 0) status |= 0x0200;
+                    }
+                } else {
+                    setST(rm, getST(rm) / getST(0));
                 }
                 pop();
                 break;
