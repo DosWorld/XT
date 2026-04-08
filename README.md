@@ -90,7 +90,7 @@ instead).
 ### Installing XT/DW
 
 XT should run on any Java 17 or greater PC, including Windows, Mac or Linux. Intel or ARM.
-Use the GitHub [Releases](https://github.com/electricbolt/xt/releases) link to download `xt.zip`. XT is only ~110KB installed.
+Use the GitHub [Releases](https://github.com/DosWorld/XTDW/releases) link to download `xt.zip`. XT is only ~110KB installed.
 
 #### MacOS
 
