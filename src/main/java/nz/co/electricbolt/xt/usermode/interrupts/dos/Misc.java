@@ -7,6 +7,7 @@ import nz.co.electricbolt.xt.usermode.interrupts.annotations.DS;
 import nz.co.electricbolt.xt.usermode.interrupts.annotations.DX;
 import nz.co.electricbolt.xt.usermode.interrupts.annotations.Interrupt;
 import nz.co.electricbolt.xt.usermode.util.MemoryUtil;
+import nz.co.electricbolt.xt.usermode.interrupts.dos.TerminateProgram;
 
 public class Misc {
 
@@ -26,6 +27,11 @@ public class Misc {
         cpu.getReg().AX.setValue((short) 0x1606); // Report version DOS 6.22
         cpu.getReg().BX.setValue((short) 0x0);
         cpu.getReg().CX.setValue((short) 0x0);
+    }
+
+    @Interrupt(function = 0x62, description = "Get PSP address")
+    public void getPSPAddress(final CPU cpu) {
+        cpu.getReg().BX.setValue(TerminateProgram.getCurrentPSP());
     }
 
     @Interrupt(function = 0x38, description = "Get country specific information")

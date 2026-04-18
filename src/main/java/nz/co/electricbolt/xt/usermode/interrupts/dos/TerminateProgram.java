@@ -11,11 +11,21 @@ import java.util.Stack;
 public class TerminateProgram {
 
     private static final Stack<SavedContext> contextStack = new Stack<>();
+    private static short currentPSP = 0x0090;
+
+    public static short getCurrentPSP() {
+        return currentPSP;
+    }
+
+    public static void setCurrentPSP(short segment) {
+        currentPSP = segment;
+    }
 
     public static void pushContext(CPU cpu) {
         SavedContext ctx = new SavedContext();
         ctx.regs = cpu.getReg().clone();
         ctx.psp = new byte[256];
+        ctx.savedPSP = currentPSP;
         SegOfs psp = new SegOfs((short) 0x0090, (short) 0x0000);
         for (int i = 0; i < 256; i++) {
             ctx.psp[i] = cpu.getMemory().readByte(new SegOfs(psp.getSegment(), (short)(psp.getOffset() + i)));
@@ -27,6 +37,7 @@ public class TerminateProgram {
 
     public static void popContext(CPU cpu) {
         SavedContext ctx = contextStack.pop();
+        currentPSP = ctx.savedPSP;
         cpu.getReg().setFrom(ctx.regs);
         cpu.getReg().SS.setValue(ctx.ss);
         cpu.getReg().SP.setValue(ctx.sp);
@@ -90,5 +101,6 @@ public class TerminateProgram {
         short ss;
         short sp;
         short childSegment;
+        short savedPSP;
     }
 }

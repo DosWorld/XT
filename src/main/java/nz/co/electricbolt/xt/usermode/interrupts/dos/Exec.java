@@ -70,6 +70,7 @@ public class Exec {
         loader.load(filename, childPSP);
 
         TerminateProgram.setChildSegment(childPSP);
+        TerminateProgram.setCurrentPSP(childPSP);
 
         cpu.getReg().flags.setCarry(false);
         cpu.getReg().AX.setValue((short) 0x0000);
