@@ -5,8 +5,8 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>nz.co.electricbolt</groupId>
-    <artifactId>xttest</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <artifactId>xt</artifactId>
+    <version>1.0.5-SNAPSHOT</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
