@@ -146,7 +146,9 @@ public class CPU {
         if ((reg.CS.getValue() & 0xFFFF) == 0xF000 && (reg.IP.getValue() & 0xFFFF) >= 0xFF00 && (reg.IP.getValue() & 0xFFFF) <= 0xFFFF) {
             int interrupt = reg.IP.getValue() & 0xFF;
             delegate.interrupt((byte) interrupt);
+            short handlerFlags = reg.flags.getValue16();
             iret();
+            reg.flags.setValue16(handlerFlags);
             return;
         }
 

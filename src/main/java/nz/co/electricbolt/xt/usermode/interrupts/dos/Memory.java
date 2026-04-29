@@ -37,8 +37,13 @@ public class Memory {
     }
     
     @Interrupt(function = 0x4A, description = "Resize memory block")
-    public void resizeMemoryBlock(final CPU cpu) {
-        cpu.getReg().flags.setCarry(false);
+    public void resizeMemoryBlock(CPU cpu, @ES short segment, @BX short newSize) {
+        if (memoryManager == null || !memoryManager.isInitialized()) {
+            cpu.getReg().flags.setCarry(true);
+            cpu.getReg().AX.setValue((byte) 0x01);
+            return;
+        }
+        memoryManager.resizeMemory(cpu, segment, newSize);
     }
     
     public static void allocateMemoryBlockStatic(CPU cpu, short paragraphs) {
