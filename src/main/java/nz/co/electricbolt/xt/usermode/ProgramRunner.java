@@ -28,19 +28,21 @@ public class ProgramRunner implements CPUDelegate {
     private final List<DumpRegion> dumpRegions;
     private final Long maxInstructions;
     private final boolean traceMode;
+    private final List<String> environmentVariables;
 
     public ProgramRunner(final String programPath, final String commandLine, final String hostWorkingDirectory,
                          final boolean traceCPU, final boolean traceInterrupt, final String traceFile,
                          final List<Breakpoint> breakpoints, final List<Watchpoint> watchpoints, final Long maxInstructions,
-                         final boolean traceMode, List<DumpRegion> dumpRegions) {
+                         final boolean traceMode, List<DumpRegion> dumpRegions, List<String> environmentVariables) {
         directoryTranslation = new DirectoryTranslation(hostWorkingDirectory);
         this.programPath = directoryTranslation.emulatedPathToHostPath(programPath);
         this.commandLine = commandLine;
         this.breakpoints = breakpoints;
         this.watchpoints = watchpoints;
-        this.maxInstructions = maxInstructions;
         this.dumpRegions = dumpRegions;
+        this.maxInstructions = maxInstructions;
         this.traceMode = traceMode;
+        this.environmentVariables = environmentVariables;
 
         this.cpu = new CPU(this);
         this.interrupts = new Interrupts();
@@ -59,7 +61,14 @@ public class ProgramRunner implements CPUDelegate {
 
         final EnvironmentVariables environment = new EnvironmentVariables(cpu.getMemory(), (short) 0x0050, (short) 0x0000);
         environment.writeVariable("PATH", "C:\\");
-        environment.writeExecutablePath(directoryTranslation.hostPathToEmulatedPath(programPath));
+        for (String env : environmentVariables) {
+            int index = env.indexOf('=');
+            if (index != -1) {
+                environment.writeVariable(env.substring(0, index), env.substring(index + 1));
+            }
+        }
+        String emulatedPath = directoryTranslation.hostPathToEmulatedPath(programPath);
+        environment.writeExecutablePath(FileIO.getFilenameFromPath(emulatedPath));
 
         final ProgramSegmentPrefix psp = new ProgramSegmentPrefix(cpu.getMemory(), (short) 0x0090, (short) 0x0000);
         psp.writeProgramEnd((short) 0xF000);

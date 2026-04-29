@@ -20,13 +20,14 @@ public class Main {
     private boolean traceMode = false;
     private final List<Watchpoint> watchpoints = new ArrayList<>();
     private final List<DumpRegion> dumpRegions = new ArrayList<>();
+    private final List<String> environmentVariables = new ArrayList<>();
 
     private Main(final CommandLineParser commandLine) {
         this.commandLine = commandLine;
     }
 
     private void printAppVersion() {
-        System.out.println("XT/DW version 1.0.2; Copyright (c) 2026; DosWorld.");
+        System.out.println("XT/DW version 1.0.3; Copyright (c) 2026; DosWorld.");
         System.out.println("Copyright (c) 2025; Electric Bolt Limited.");
     }
 
@@ -45,9 +46,11 @@ public class Main {
 
     private void haltSyntaxRun(final String message) {
         printAppVersion();
-        System.out.println("Syntax:        xt run [--max=N] [-c dir] program [program-args]");
+        System.out.println("Syntax:        xt run [--max=N] [-e KEY=VALUE]... [-c dir] program [program-args]");
         System.out.println("               Run a .EXE or .COM command line MS-DOS app on your host system.");
         System.out.println("--max=N      = Maximum number of instructions to execute before stopping");
+        System.out.println("-e KEY=VALUE = Set a DOS environment variable. Can be specified multiple times.");
+        System.out.println("--env=KEY=VALUE = Set a DOS environment variable. Can be specified multiple times.");
         System.out.println("-c dir       = The host directory that will be the root of the emulated C: drive");
         System.out.println("               If not specified then the current working directory will be used.");
         System.out.println("program      = The .EXE or .COM command line MS-DOS app you want to run. You can");
@@ -65,10 +68,12 @@ public class Main {
 
     private void haltSyntaxTrace(final String message) {
         printAppVersion();
-        System.out.println("Syntax:        xt trace [--max=N] [--bp=SEG:OFS[:COND]]... [--wp=SEG:OFS:type]... [--dump=SEG:OFS:LEN]... program [program-args]");
+        System.out.println("Syntax:        xt trace [--max=N] [-e KEY=VALUE]... [--bp=SEG:OFS[:COND]]... [--wp=SEG:OFS:type]... [--dump=SEG:OFS:LEN]... program [program-args]");
         System.out.println("               Trace execution of a .EXE or .COM command line MS-DOS app.");
         System.out.println("               For each instruction, displays CS:IP, disassembly, and all register values.");
         System.out.println("--max=N      = Maximum number of instructions to trace before stopping");
+        System.out.println("-e KEY=VALUE = Set a DOS environment variable. Can be specified multiple times.");
+        System.out.println("--env=KEY=VALUE = Set a DOS environment variable. Can be specified multiple times.");
         System.out.println("--bp=SEG:OFS = Set a breakpoint at the specified segment:offset (hex)");
         System.out.println("               Can be specified multiple times. Example: --bp=1000:2000");
         System.out.println("--bp=SEG:OFS:COND = Conditional breakpoint. Condition format: REG==VALUE");
@@ -111,7 +116,7 @@ public class Main {
             hostWorkingDir += File.separator;
         }
         final ProgramRunner runner = new ProgramRunner(emulatedProgramPath, emulatedProgramArgs, hostWorkingDir,
-                traceCPU, traceInterrupt, traceFile, breakpoints, watchpoints, maxInstructions, traceMode, dumpRegions);
+                traceCPU, traceInterrupt, traceFile, breakpoints, watchpoints, maxInstructions, traceMode, dumpRegions, environmentVariables);
         printSettings();
         runner.loadAndExecute();
     }
@@ -195,6 +200,26 @@ public class Main {
         }
     }
 
+    private boolean parseEnvOption() {
+        String argument = commandLine.peek();
+        if (argument == null) return false;
+        if (argument.startsWith("--env=")) {
+            commandLine.next();
+            environmentVariables.add(argument.substring(6));
+            return true;
+        } else if (argument.equals("-e")) {
+            commandLine.next();
+            String env = commandLine.next();
+            if (env == null) {
+                if (traceMode) haltSyntaxTrace("expecting environment variable after -e");
+                else haltSyntaxRun("expecting environment variable after -e");
+            }
+            environmentVariables.add(env);
+            return true;
+        }
+        return false;
+    }
+
     private void parseRunOptions() {
         while (commandLine.hasNext()) {
             String argument = commandLine.peek();
@@ -203,6 +228,8 @@ public class Main {
             }
             if (argument.startsWith("--max=")) {
                 parseMaxOption();
+            } else if (argument.startsWith("--env=")) {
+                parseEnvOption();
             } else {
                 haltSyntaxRun(argument + " option not recognized in run mode");
             }
@@ -210,17 +237,20 @@ public class Main {
     }
 
     private void parseRun() {
-        parseRunOptions();
-
-        if (!commandLine.hasNext()) {
-            haltSyntaxRun("expecting program argument");
-        }
-        if (commandLine.hasNext()) {
+        while (commandLine.hasNext()) {
             String argument = commandLine.peek();
-            if (argument != null && argument.equals("-c")) {
+            if (argument == null) break;
+            if (argument.startsWith("--")) {
+                parseRunOptions();
+            } else if (argument.equals("-c")) {
                 parseRootDirectory();
+            } else if (argument.equals("-e")) {
+                parseEnvOption();
+            } else {
+                break;
             }
         }
+
         if (!commandLine.hasNext()) {
             haltSyntaxRun("expecting program argument");
         }
@@ -309,14 +339,21 @@ public class Main {
     }
 
     private void parseTrace() {
-        if (!commandLine.hasNext()) {
-            haltSyntaxTrace("expecting program argument");
-        }
         traceMode = true;
-        parseDoubleDashOptions();
-        if (commandLine.hasNext() && commandLine.peek().startsWith("-t")) {
-            parseTraceOptions();
+        while (commandLine.hasNext()) {
+            String argument = commandLine.peek();
+            if (argument == null) break;
+            if (argument.startsWith("--")) {
+                parseDoubleDashOptions();
+            } else if (argument.equals("-e")) {
+                parseEnvOption();
+            } else if (argument.startsWith("-t")) {
+                parseTraceOptions();
+            } else {
+                break;
+            }
         }
+
         if (!commandLine.hasNext()) {
             haltSyntaxTrace("expecting program argument");
         }
@@ -488,6 +525,8 @@ public class Main {
             }
             if (argument.startsWith("--max=")) {
                 parseMaxOption();
+            } else if (argument.startsWith("--env=")) {
+                parseEnvOption();
             } else if (argument.startsWith("--bp=")) {
                 parseBreakpointOption();
             } else if (argument.startsWith("--wp=")) {
