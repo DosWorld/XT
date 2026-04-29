@@ -63,4 +63,9 @@ public class Memory {
         }
         memoryManager.freeMemory(cpu, segment);
     }
+
+    public static void releaseUnusedMemoryAfterLoad(short pspSegment, short ssSegment, short spValue) {
+        if (memoryManager == null || !memoryManager.isInitialized()) return;
+        memoryManager.releaseUnusedMemoryAfterLoad(pspSegment, ssSegment, spValue);
+    }
 }

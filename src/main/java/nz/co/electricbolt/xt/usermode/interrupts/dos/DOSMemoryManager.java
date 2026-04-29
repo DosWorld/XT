@@ -329,9 +329,28 @@ public class DOSMemoryManager {
         }
     }
     
-    /**
-     * Get the segment of the first MCB
-     */
+    // Shrinks the program's initial MCB to SS:ceil(SP/16) and creates a free block for
+    // the remainder — mirrors real DOS behaviour so INT 21h/48h probes return non-zero BX.
+    public void releaseUnusedMemoryAfterLoad(short pspSegment, short ssSegment, short spValue) {
+        if (!initialized) return;
+
+        int stackTopParagraph = (ssSegment & 0xFFFF) + (((spValue & 0xFFFF) + 15) >> 4);
+        int programParagraphs = stackTopParagraph - (pspSegment & 0xFFFF);
+        if (programParagraphs < 1) programParagraphs = 1;
+
+        int currentSize = cpu.getMemory().readWord(new SegOfs(firstMCBSegment, MCB_SIZE)) & 0xFFFF;
+        if (programParagraphs >= currentSize) return;
+
+        int mcbSeg = firstMCBSegment & 0xFFFF;
+        int tailMCBSeg = mcbSeg + programParagraphs + 1;
+        int tailSize = currentSize - programParagraphs - 1;
+
+        cpu.getMemory().writeWord(new SegOfs(firstMCBSegment, MCB_SIZE), (short) programParagraphs);
+        cpu.getMemory().writeByte(new SegOfs(firstMCBSegment, MCB_MARKER), MCB_MIDDLE);
+
+        writeMCB((short) tailMCBSeg, MCB_LAST, (short) 0, (short) tailSize);
+    }
+
     public short getFirstMCBSegment() {
         return firstMCBSegment;
     }

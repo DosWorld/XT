@@ -96,6 +96,8 @@ public class ProgramRunner implements CPUDelegate {
 
         final ProgramLoader programLoader = new ProgramLoader(cpu);
         programLoader.load(programPath);
+        nz.co.electricbolt.xt.usermode.interrupts.dos.Memory.releaseUnusedMemoryAfterLoad(
+            (short) 0x0090, cpu.getReg().SS.getValue(), cpu.getReg().SP.getValue());
 
         int stubSeg = 0xF000;
         int stubBase = 0xFF00;
